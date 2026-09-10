@@ -1,7 +1,7 @@
 ---
-title: "Week 2: Getting Set Up"
+title: "Week 2: Census Data"
 description: "First impressions, and getting the workflow running."
-date: 2026-08-28
+date: 2026-09-05
 ---
 
 ## What We Did
