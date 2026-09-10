@@ -31,4 +31,4 @@ I'm a student in the CPLN program at Penn. My background is in
 <!-- CHANGE THIS -->
 
 - Email: geedchen@upenn.edu
-- GitHub: [@geedchen](https://github.com/your-username)
+- GitHub: [@geedchen](https://github.com/geedchen)
