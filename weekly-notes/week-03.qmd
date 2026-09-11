@@ -1,0 +1,77 @@
+---
+title: "Week 3: ggplot and more Moes"
+description: "First impressions, and getting the workflow running."
+date: 2026-09-11
+---
+
+## What We Did
+
+## Key Concepts
+
+## Reflection
+
+## Questions I Still Have
+
+## Week 3 Notes
+
+Ansombe's Quartet
+Same: mean x,y, correlation, regression line
+
+plot is a mapping from columns in your data to visual properties on your page. ("grammar of graphics") "gg"
+
+your data:    page(canvas):
+estimate    > position on the y-axis
+population  > position on x-axis
+reliability > color
+moe         > size
+
+p < 1. ggplot(data)-data i'm using > create a blank canvas
+    2. aes(...) Aesthetic Mappings.    no decorating
+    3. geom_*() the shape/type of chart
+
+ggplot(tract_data) +
+aes(x=population, y=moe_pct) +
+geom_point()
+
+inside aes().             Not inside
+aes(color=reliability).   geom_point("blue")
+                          decorations
+
+ggplot(county_data) + 
+aes(x=estimate, y=population, (color="blue")x) +
+geom_point(color="blue")
+
+what i want to know          GEOM
+how a variable is spread.    geom_histogram()
+how do two variables relate  geom_point()
+how do groups compare.       geom_boxplot()
+how do things change over time   geom_line()
+how uncertain is a value.    geom_error bar()
+
+facet_wrap(~reliability)
+
+Coefficient of Variation (CV)
+-relative measure of sampling error
+standard error/estimate * 100
+
+Low CV: 15% > high reliability
+Medium: 15-30%
+High: 30% > high sampling error
+
+Derived Uncertainty
+Pov. Rate = # in poverty +- moe / total pop +-moe
+moe_sum() > adding estimates together
+moe_pop() > one estimate as share a another
+moe_ratio() > pov#/HH income, one not a subset of another
+
+Change over time
+1. the overlapping intervals
+   2019-2023, 2018-2022
+   compare non-overlapping intervals 2014-2018 vs 2019-2023
+   
+The standard error of difference
+SEdiff = sqrt(SE1 ^2 + SE2 ^2)
+z = (est1 - est2)/SEdiff
+
+Confidence Interval of Change
+Interval = Difference +- (1.645*SEdiff)
