@@ -6,10 +6,7 @@ title: "About Me"
 
 <!-- CHANGE THIS -->
 
-I earned my undergraduate degree at the University of Massachusetts, Amherst, and my major was geography. 
-
-Write a few paragraphs about yourself here: where you came from before MUSA,
-what drew you to urban spatial analytics, and what you're hoping to do with it.
+I earned my undergraduate degree at the University of Massachusetts, Amherst, and my major was geography. Within the field of urban planning, I have focused my research on smart cities. I have a keen interest in urban renewal and sustainable urban development areas that rely heavily on urban spatial analysis. Mastering the techniques and capabilities of spatial analysis has provided me with a more multidimensional understanding of the urban landscape and a more granular grasp of the data involved. 
 
 ## Skills
 

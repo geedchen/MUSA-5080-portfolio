@@ -32,7 +32,7 @@
     "href": "weekly-notes/week-01.html#reflection",
     "title": "Week 1: Getting Set Up",
     "section": "Reflection",
-    "text": "Reflection\n\nWhat I want out of this course:\nOne thing I’m nervous about:"
+    "text": "Reflection\n\nWhat I want out of this course: Through the urban spatial analysis course, I aim to learn how to build predictive data models, enhance their validity and reliability, and simultaneously strengthen my programming skills. Ultimately, I hope to use data analysis to offer insights to myself and others regarding policy limitations and equity.\nOne thing I’m nervous about: I don’t have a computer science background, so I’m not fluent in coding. I’m worried that R code might be an issue for a new learner due to the high difficulty."
   },
   {
     "objectID": "weekly-notes/week-01.html#questions-i-still-have",
@@ -40,6 +40,13 @@
     "title": "Week 1: Getting Set Up",
     "section": "Questions I Still Have",
     "text": "Questions I Still Have"
+  },
+  {
+    "objectID": "weekly-notes/week-01.html#how-to-build-a-reliable-predictive-model-for-data-analysis",
+    "href": "weekly-notes/week-01.html#how-to-build-a-reliable-predictive-model-for-data-analysis",
+    "title": "Week 1: Getting Set Up",
+    "section": "-How to build a reliable predictive model for data analysis?",
+    "text": "-How to build a reliable predictive model for data analysis?"
   },
   {
     "objectID": "weekly-notes/week-02.html#key-concepts",
@@ -67,7 +74,7 @@
     "href": "weekly-notes/week-02.html#week-2-notes",
     "title": "Week 2: Census Data",
     "section": "Week 2 Notes",
-    "text": "Week 2 Notes"
+    "text": "Week 2 Notes\nConsole: temporary, code disappears R script: Code chunk lives inside .qmd\nresult &lt;- filter(counties, population &gt; 50000) #keep the big ones! result: object: hold the result &lt;- assignment arrow filter: function name (verb) county: input data population &gt; 500000: arguments\nPackages: install.package(“dplyr”) -&gt; do once library(dplyr) -&gt; took the book off the shelf, everytime you want to do it\ndata frame: = tibble (nices, prints, prettier)\nName income MOE moe_pct Adams 78975 3334 9 Berks 74617 1191 10 Bucks 104200 1502 11\ntibble -&gt; verb -&gt; tibble\nfilter() picks rows select() pick columns mutate() add a new computed column arrange() change the order of the rows asc, desc group_by() summary() -&gt; many rows become few\ncounty state income state income\norange NY 70,000 NY 75,000 Iguassu NY 80,000 —–&gt; BCA 95,000 Orange CA 90,000 Sacramento CA 100,000\nstep1 &lt;- filter(counties, moe_pct &gt; 10) step2 &lt;- arrange(step1, desc(moe_pct)) step3 &lt;- select(step2, name, moe_pct)\n“and then” %&gt;%\nnew_data &lt;- counties %&gt;% filter (moe_pct&gt;10) %&gt;% arrange(desc(moe_pct)) %&gt;% select(name, moe_pct)\nDecennial census: 10 years, 10 questions, a sample of the people get (Long form) American Community survey (ACS): 2005 born, 3% of households are surveyed - estimate for the population - 1-year ACS: places greater than 65,000 people, most current - 3-year ACS: DEAD - 5-year ACS: block group, tract. A 5 year average estimate +- MOE\nB 19103_001E B:(base table) 19103:table number 001:line number E: estimate, M=MOE load_variables() library(tidycensus)\nstate - county - tract- “neighborhood” (5000-8000 people), boundaries change, nice - block group (horrible MOE, unrealiable estimates) - block (only decennial census) people - longitudinal tracts - NHGIS, LTDB\nGEOID: state (2), county (3), tract (6) - 11 digits 12 101 000100 String (in order to keet the 1st “0”)\ndata &lt;- get_acs(geography: “county”, variables: c(“B19013_001”, “B01003_001”), State: “PA”, year: 2023 survey: “acs5”, output = “wide”)\nTidy (LONG) GEOID NAME VARIABLE Estimate MOE 42001 Adams B19013_001 78795 3344 42001 Adams B01003_001 16002 4389\nwide GEOID Name B19013_001 M"
   },
   {
     "objectID": "data/readme.html",
@@ -116,14 +123,14 @@
     "href": "about.html",
     "title": "About Me",
     "section": "",
-    "text": "I earned my undergraduate degree at the University of Massachusetts, Amherst, and my major was geography.\nWrite a few paragraphs about yourself here: where you came from before MUSA, what drew you to urban spatial analytics, and what you’re hoping to do with it."
+    "text": "I earned my undergraduate degree at the University of Massachusetts, Amherst, and my major was geography. Within the field of urban planning, I have focused my research on smart cities. I have a keen interest in urban renewal and sustainable urban development areas that rely heavily on urban spatial analysis. Mastering the techniques and capabilities of spatial analysis has provided me with a more multidimensional understanding of the urban landscape and a more granular grasp of the data involved."
   },
   {
     "objectID": "about.html#background",
     "href": "about.html#background",
     "title": "About Me",
     "section": "",
-    "text": "I earned my undergraduate degree at the University of Massachusetts, Amherst, and my major was geography.\nWrite a few paragraphs about yourself here: where you came from before MUSA, what drew you to urban spatial analytics, and what you’re hoping to do with it."
+    "text": "I earned my undergraduate degree at the University of Massachusetts, Amherst, and my major was geography. Within the field of urban planning, I have focused my research on smart cities. I have a keen interest in urban renewal and sustainable urban development areas that rely heavily on urban spatial analysis. Mastering the techniques and capabilities of spatial analysis has provided me with a more multidimensional understanding of the urban landscape and a more granular grasp of the data involved."
   },
   {
     "objectID": "about.html#skills",

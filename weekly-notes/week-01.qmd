@@ -35,11 +35,11 @@ sessionInfo()$R.version$version.string
 
 <!-- CHANGE THIS: 3-4 sentences -->
 
-What I want out of this course:
+What I want out of this course: Through the urban spatial analysis course, I aim to learn how to build predictive data models, enhance their validity and reliability, and simultaneously strengthen my programming skills. Ultimately, I hope to use data analysis to offer insights to myself and others regarding policy limitations and equity.
 
-One thing I'm nervous about:
+One thing I'm nervous about: I don't have a computer science background, so I'm not fluent in coding. I'm worried that R code might be an issue for a new learner due to the high difficulty.
 
 ## Questions I Still Have
 
--
+-How to build a reliable predictive model for data analysis?
 -
