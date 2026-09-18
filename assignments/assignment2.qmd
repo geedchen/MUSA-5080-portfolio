@@ -169,8 +169,8 @@ samples generally available in less populated places.
 ## What this means for policy
 
 The results show that Hamilton County is the New York county we know the least
-about for median gross rent. Its estimated median gross rent is \$860, with a
-margin of error of \$95, or about 11.0 percent of the estimate. It is the only
+about for median gross rent. Its estimated median gross rent is $860, with a
+margin of error of $95, or about 11.0 percent of the estimate. It is the only
 county classified as low confidence under the thresholds used here. Schuyler
 and Greene Counties also have relatively large margins of error, at
 approximately 8.7 percent and 8.0 percent, respectively, and are classified as
