@@ -1,0 +1,75 @@
+---
+title: "Week 4: "
+description: "First impressions, and getting the workflow running."
+date: 2026-09-18
+---
+
+## What We Did
+
+## Key Concepts
+
+## Reflection
+
+## Questions I Still Have
+
+## Week 4 Notes
+
+GEOID   |    med_inc.23
+100          82000
+200          31500
+300          45000
+(characters)
+GEOID   |    med_inc.15         Must be same!
+100          61000
+200          27000
+400          39000
+GEOID | med_inc.23 |  med_inc.15  | geometry ->"sticky"
+100     82000         61000          POLYGON((-75.45,39.95))  .shp  .gdb  SF-simple features
+200     31500         27000
+300     45000         NA
+
+Left.join(income_23, income_15, by="GEOID")
+
+get_acs(..., geometry = True)
+
+
+Coordinate Reference Systems (CRS)
+
+Geographic      |     Projected
+units: degrees        State Plane
+                      Units: Ft or Meters
+                      Good for: Local Mapping
+
+Clark 1866 + Meades Ranch, KS -> North American Datum of 1927: NAD27
+GRS-80   Earth-centered: NAD83
+Earth-centered: WGS84 (GPS standard)
+
+Shapes -> Conformal Conic
+Areas -> Equal -Area
+Distance -> Equal-Distance
+Direction
+
+EPSG  Name   |   Units
+2272  PA Southern State Plane     US Feet or Meters
+5070  Albers Equal Area    Meters
+4326  WGS84    Degrees
+4269  NAD83    Degrees 
+
+St_Crs(data)
+Need to know units
+
+St_Set_Crs() -> 2272
+Adding the correct label
+
+St_transform(data, 2272)
+Change the coordinate system
+
+tbw many tracts
+near(1/2 mile) from station
+
+St_filter() -> Count the tracts
+St_intersection() -> Shapes Change -> more shapes (just common area)
+St_union() -> everything
+
+St_join(station,tracts)
+St_distance -> returns a matrix

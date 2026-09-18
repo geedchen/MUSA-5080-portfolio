@@ -77,39 +77,46 @@
     "text": "Week 2 Notes\nConsole: temporary, code disappears R script: Code chunk lives inside .qmd\nresult &lt;- filter(counties, population &gt; 50000) #keep the big ones! result: object: hold the result &lt;- assignment arrow filter: function name (verb) county: input data population &gt; 500000: arguments\nPackages: install.package(“dplyr”) -&gt; do once library(dplyr) -&gt; took the book off the shelf, everytime you want to do it\ndata frame: = tibble (nices, prints, prettier)\nName income MOE moe_pct Adams 78975 3334 9 Berks 74617 1191 10 Bucks 104200 1502 11\ntibble -&gt; verb -&gt; tibble\nfilter() picks rows select() pick columns mutate() add a new computed column arrange() change the order of the rows asc, desc group_by() summary() -&gt; many rows become few\ncounty state income state income\norange NY 70,000 NY 75,000 Iguassu NY 80,000 —–&gt; BCA 95,000 Orange CA 90,000 Sacramento CA 100,000\nstep1 &lt;- filter(counties, moe_pct &gt; 10) step2 &lt;- arrange(step1, desc(moe_pct)) step3 &lt;- select(step2, name, moe_pct)\n“and then” %&gt;%\nnew_data &lt;- counties %&gt;% filter (moe_pct&gt;10) %&gt;% arrange(desc(moe_pct)) %&gt;% select(name, moe_pct)\nDecennial census: 10 years, 10 questions, a sample of the people get (Long form) American Community survey (ACS): 2005 born, 3% of households are surveyed - estimate for the population - 1-year ACS: places greater than 65,000 people, most current - 3-year ACS: DEAD - 5-year ACS: block group, tract. A 5 year average estimate +- MOE\nB 19103_001E B:(base table) 19103:table number 001:line number E: estimate, M=MOE load_variables() library(tidycensus)\nstate - county - tract- “neighborhood” (5000-8000 people), boundaries change, nice - block group (horrible MOE, unrealiable estimates) - block (only decennial census) people - longitudinal tracts - NHGIS, LTDB\nGEOID: state (2), county (3), tract (6) - 11 digits 12 101 000100 String (in order to keet the 1st “0”)\ndata &lt;- get_acs(geography: “county”, variables: c(“B19013_001”, “B01003_001”), State: “PA”, year: 2023 survey: “acs5”, output = “wide”)\nTidy (LONG) GEOID NAME VARIABLE Estimate MOE 42001 Adams B19013_001 78795 3344 42001 Adams B01003_001 16002 4389\nwide GEOID Name B19013_001 M"
   },
   {
-    "objectID": "data/readme.html",
-    "href": "data/readme.html",
-    "title": "",
+    "objectID": "weekly-notes/index.html",
+    "href": "weekly-notes/index.html",
+    "title": "Weekly Notes",
     "section": "",
-    "text": "Code\n\n\n\n\nData files for MUSA 5080\nDownload assignment data from Canvas and save it here. Do not rename the files! Have a nice day :)"
+    "text": "Notes from each week of MUSA 5080. New entries appear here automatically — add a .qmd file to this folder and render.\n\n\n\n\n\n\n\n\n\n\n\nWeek 4:\n\n\nFirst impressions, and getting the workflow running.\n\n\n\n\n\nSep 18, 2026\n\n\n\n\n\n\n\nWeek 3: ggplot and more Moes\n\n\nFirst impressions, and getting the workflow running.\n\n\n\n\n\nSep 11, 2026\n\n\n\n\n\n\n\nWeek 2: Census Data\n\n\nFirst impressions, and getting the workflow running.\n\n\n\n\n\nSep 5, 2026\n\n\n\n\n\n\n\nWeek 1: Getting Set Up\n\n\nFirst impressions, and getting the workflow running.\n\n\n\n\n\nAug 28, 2026\n\n\n\n\n\nNo matching items"
   },
   {
-    "objectID": "index.html",
-    "href": "index.html",
-    "title": "Home",
+    "objectID": "about.html",
+    "href": "about.html",
+    "title": "About Me",
     "section": "",
-    "text": "Welcome to my portfolio for MUSA 5080: Public Policy Analytics at the University of Pennsylvania.\nThis site documents my work in the Master of Urban Spatial Analytics program — weekly notes, course assignments, and a final project applying data analysis to urban policy questions.\n\n\n\nI’m a student in the CPLN program at Penn. My background is in [Smart Cities], and I’m interested in [urban renewal and climate resilience].\n\n\n\n\nWeekly Notes — what I’m learning each week\nAssignments — analyses completed for the course\nAbout — more background and how to reach me\n\n\n\n\n\n\nEmail: geedchen@upenn.edu\nGitHub: @geedchen"
+    "text": "I earned my undergraduate degree at the University of Massachusetts, Amherst, and my major was geography. Within the field of urban planning, I have focused my research on smart cities. I have a keen interest in urban renewal and sustainable urban development areas that rely heavily on urban spatial analysis. Mastering the techniques and capabilities of spatial analysis has provided me with a more multidimensional understanding of the urban landscape and a more granular grasp of the data involved."
   },
   {
-    "objectID": "index.html#about-me",
-    "href": "index.html#about-me",
-    "title": "Home",
+    "objectID": "about.html#background",
+    "href": "about.html#background",
+    "title": "About Me",
     "section": "",
-    "text": "I’m a student in the CPLN program at Penn. My background is in [Smart Cities], and I’m interested in [urban renewal and climate resilience]."
+    "text": "I earned my undergraduate degree at the University of Massachusetts, Amherst, and my major was geography. Within the field of urban planning, I have focused my research on smart cities. I have a keen interest in urban renewal and sustainable urban development areas that rely heavily on urban spatial analysis. Mastering the techniques and capabilities of spatial analysis has provided me with a more multidimensional understanding of the urban landscape and a more granular grasp of the data involved."
   },
   {
-    "objectID": "index.html#what-youll-find-here",
-    "href": "index.html#what-youll-find-here",
-    "title": "Home",
-    "section": "",
-    "text": "Weekly Notes — what I’m learning each week\nAssignments — analyses completed for the course\nAbout — more background and how to reach me"
+    "objectID": "about.html#skills",
+    "href": "about.html#skills",
+    "title": "About Me",
+    "section": "Skills",
+    "text": "Skills\n\n\nLanguages & Tools: R, Quarto, Git\nSpatial: (add as you learn)\nData: US Census / ACS via tidycensus"
   },
   {
-    "objectID": "index.html#get-in-touch",
-    "href": "index.html#get-in-touch",
-    "title": "Home",
+    "objectID": "about.html#contact",
+    "href": "about.html#contact",
+    "title": "About Me",
+    "section": "Contact",
+    "text": "Contact\n\n\nEmail: geedchen@upenn.edu\nGitHub: @geedchen"
+  },
+  {
+    "objectID": "assignments/index.html",
+    "href": "assignments/index.html",
+    "title": "Assignments",
     "section": "",
-    "text": "Email: geedchen@upenn.edu\nGitHub: @geedchen"
+    "text": "Completed assignments for MUSA 5080. New assignments appear here automatically once you add the .qmd file to this folder and render.\n\n\n\n\n\n\n\n\n\n\n\nAssignment 2: Who Do We Know the Least About?\n\n\n\n\n\n\n\n\nSep 18, 2026\n\n\n\n\n\nNo matching items"
   },
   {
     "objectID": "assignments/assignment2.html",
@@ -175,46 +182,67 @@
     "text": "What this means for policy\nThe results show that Hamilton County is the New York county we know the least about for median gross rent. Its estimated median gross rent is $860, with a margin of error of $95, or about 11.0 percent of the estimate. It is the only county classified as low confidence under the thresholds used here. Schuyler and Greene Counties also have relatively large margins of error, at approximately 8.7 percent and 8.0 percent, respectively, and are classified as moderate confidence.\nThis pattern is related to the way the American Community Survey works. The ACS is based on a sample rather than a complete count of every household. Counties with smaller populations generally provide fewer sampled households, so their estimates tend to be less precise. In this analysis, high-confidence counties have an average population of about 381,479, compared with about 41,178 for moderate-confidence counties and 5,102 for the low-confidence county. These results are consistent with the expectation that smaller places are measured with greater uncertainty.\nIgnoring this uncertainty could create unfair policy outcomes. If New York State allocated affordable-housing funds using median rent estimates alone, Hamilton County could be treated as though its estimate were just as precise as estimates for much larger counties. A county near a funding threshold might receive too little assistance, or be excluded entirely, because of sampling variation rather than a genuine difference in housing needs. Agencies should therefore consider both the estimate and its margin of error, especially when making decisions about small rural communities."
   },
   {
-    "objectID": "assignments/index.html",
-    "href": "assignments/index.html",
-    "title": "Assignments",
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Home",
     "section": "",
-    "text": "Completed assignments for MUSA 5080. New assignments appear here automatically once you add the .qmd file to this folder and render.\n\n\n\n\n\n\n\n\n\n\n\nAssignment 2: Who Do We Know the Least About?\n\n\n\n\n\n\n\n\nSep 16, 2026\n\n\n\n\n\nNo matching items"
+    "text": "Welcome to my portfolio for MUSA 5080: Public Policy Analytics at the University of Pennsylvania.\nThis site documents my work in the Master of Urban Spatial Analytics program — weekly notes, course assignments, and a final project applying data analysis to urban policy questions.\n\n\n\nI’m a student in the CPLN program at Penn. My background is in [Smart Cities], and I’m interested in [urban renewal and climate resilience].\n\n\n\n\nWeekly Notes — what I’m learning each week\nAssignments — analyses completed for the course\nAbout — more background and how to reach me\n\n\n\n\n\n\nEmail: geedchen@upenn.edu\nGitHub: @geedchen"
   },
   {
-    "objectID": "about.html",
-    "href": "about.html",
-    "title": "About Me",
+    "objectID": "index.html#about-me",
+    "href": "index.html#about-me",
+    "title": "Home",
     "section": "",
-    "text": "I earned my undergraduate degree at the University of Massachusetts, Amherst, and my major was geography. Within the field of urban planning, I have focused my research on smart cities. I have a keen interest in urban renewal and sustainable urban development areas that rely heavily on urban spatial analysis. Mastering the techniques and capabilities of spatial analysis has provided me with a more multidimensional understanding of the urban landscape and a more granular grasp of the data involved."
+    "text": "I’m a student in the CPLN program at Penn. My background is in [Smart Cities], and I’m interested in [urban renewal and climate resilience]."
   },
   {
-    "objectID": "about.html#background",
-    "href": "about.html#background",
-    "title": "About Me",
+    "objectID": "index.html#what-youll-find-here",
+    "href": "index.html#what-youll-find-here",
+    "title": "Home",
     "section": "",
-    "text": "I earned my undergraduate degree at the University of Massachusetts, Amherst, and my major was geography. Within the field of urban planning, I have focused my research on smart cities. I have a keen interest in urban renewal and sustainable urban development areas that rely heavily on urban spatial analysis. Mastering the techniques and capabilities of spatial analysis has provided me with a more multidimensional understanding of the urban landscape and a more granular grasp of the data involved."
+    "text": "Weekly Notes — what I’m learning each week\nAssignments — analyses completed for the course\nAbout — more background and how to reach me"
   },
   {
-    "objectID": "about.html#skills",
-    "href": "about.html#skills",
-    "title": "About Me",
-    "section": "Skills",
-    "text": "Skills\n\n\nLanguages & Tools: R, Quarto, Git\nSpatial: (add as you learn)\nData: US Census / ACS via tidycensus"
-  },
-  {
-    "objectID": "about.html#contact",
-    "href": "about.html#contact",
-    "title": "About Me",
-    "section": "Contact",
-    "text": "Contact\n\n\nEmail: geedchen@upenn.edu\nGitHub: @geedchen"
-  },
-  {
-    "objectID": "weekly-notes/index.html",
-    "href": "weekly-notes/index.html",
-    "title": "Weekly Notes",
+    "objectID": "index.html#get-in-touch",
+    "href": "index.html#get-in-touch",
+    "title": "Home",
     "section": "",
-    "text": "Notes from each week of MUSA 5080. New entries appear here automatically — add a .qmd file to this folder and render.\n\n\n\n\n\n\n\n\n\n\n\nWeek 3: ggplot and more Moes\n\n\nFirst impressions, and getting the workflow running.\n\n\n\n\n\nSep 11, 2026\n\n\n\n\n\n\n\nWeek 2: Census Data\n\n\nFirst impressions, and getting the workflow running.\n\n\n\n\n\nSep 5, 2026\n\n\n\n\n\n\n\nWeek 1: Getting Set Up\n\n\nFirst impressions, and getting the workflow running.\n\n\n\n\n\nAug 28, 2026\n\n\n\n\n\nNo matching items"
+    "text": "Email: geedchen@upenn.edu\nGitHub: @geedchen"
+  },
+  {
+    "objectID": "data/readme.html",
+    "href": "data/readme.html",
+    "title": "",
+    "section": "",
+    "text": "Code\n\n\n\n\nData files for MUSA 5080\nDownload assignment data from Canvas and save it here. Do not rename the files! Have a nice day :)"
+  },
+  {
+    "objectID": "weekly-notes/week-04.html#key-concepts",
+    "href": "weekly-notes/week-04.html#key-concepts",
+    "title": "Week 4:",
+    "section": "Key Concepts",
+    "text": "Key Concepts"
+  },
+  {
+    "objectID": "weekly-notes/week-04.html#reflection",
+    "href": "weekly-notes/week-04.html#reflection",
+    "title": "Week 4:",
+    "section": "Reflection",
+    "text": "Reflection"
+  },
+  {
+    "objectID": "weekly-notes/week-04.html#questions-i-still-have",
+    "href": "weekly-notes/week-04.html#questions-i-still-have",
+    "title": "Week 4:",
+    "section": "Questions I Still Have",
+    "text": "Questions I Still Have"
+  },
+  {
+    "objectID": "weekly-notes/week-04.html#week-4-notes",
+    "href": "weekly-notes/week-04.html#week-4-notes",
+    "title": "Week 4:",
+    "section": "Week 4 Notes",
+    "text": "Week 4 Notes\nGEOID | med_inc.23 100 82000 200 31500 300 45000 (characters) GEOID | med_inc.15 Must be same! 100 61000 200 27000 400 39000 GEOID | med_inc.23 | med_inc.15 | geometry -&gt;“sticky” 100 82000 61000 POLYGON((-75.45,39.95)) .shp .gdb SF-simple features 200 31500 27000 300 45000 NA\nLeft.join(income_23, income_15, by=“GEOID”)\nget_acs(…, geometry = True)\nCoordinate Reference Systems (CRS)\nGeographic | Projected units: degrees State Plane Units: Ft or Meters Good for: Local Mapping\nClark 1866 + Meades Ranch, KS -&gt; North American Datum of 1927: NAD27 GRS-80 Earth-centered: NAD83 Earth-centered: WGS84 (GPS standard)\nShapes -&gt; Conformal Conic Areas -&gt; Equal -Area Distance -&gt; Equal-Distance Direction\nEPSG Name | Units 2272 PA Southern State Plane US Feet or Meters 5070 Albers Equal Area Meters 4326 WGS84 Degrees 4269 NAD83 Degrees\nSt_Crs(data) Need to know units\nSt_Set_Crs() -&gt; 2272 Adding the correct label\nSt_transform(data, 2272) Change the coordinate system\ntbw many tracts near(1/2 mile) from station\nSt_filter() -&gt; Count the tracts St_intersection() -&gt; Shapes Change -&gt; more shapes (just common area) St_union() -&gt; everything\nSt_join(station,tracts) St_distance -&gt; returns a matrix"
   },
   {
     "objectID": "weekly-notes/week-03.html#key-concepts",
