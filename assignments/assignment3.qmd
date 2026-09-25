@@ -1,5 +1,5 @@
 ---
-title: "Verify the Claim: Option A"
+title: "Verify the Claim: Lubrano, Alfred. “New Census figures on Philly neighborhoods show inequality, high numbers of whites living in poverty.”"
 author: "Rutong Chen"
 date: today
 format:
@@ -23,7 +23,7 @@ library(gt)
 
 ## Part 1 — Reconstruct
 
-The article compares the 2006–2010 and 2013–2017 American Community Survey (ACS) five-year estimates. I use `B17001_002` for the estimated number of people below the poverty level and `B17001_001` for the population whose poverty status was determined. Dividing the first estimate by the second gives a poverty rate. I use ACS five-year data because those are the periods identified in the article and because tract-level data are available. The periods do not overlap: one ends in 2010 and the other begins in 2013.
+The article compares the 2006–2010 and 2013–2017 American Community Survey (ACS) five-year estimates. I use `B17001_002` for the estimated number of people below the poverty level and `B17001_001` for the population whose poverty status was determined. Dividing the first estimate by the second gives a poverty rate. I use ACS five-year data because those are the periods identified in the article and tract-level data are available. The periods do not overlap: one ends in 2010 and the other begins in 2013.
 
 The article reports figures for neighborhoods such as Eastwick and Fairhill but does not identify which census tracts it assigned to each neighborhood. I therefore analyze Philadelphia census tracts. I assume the same ACS poverty definition can be used in both periods. My tract results describe geographic patterns in the city; they cannot reproduce the article's exact neighborhood estimates.
 
@@ -253,9 +253,11 @@ reliability_table %>%
 
 ## Part 3 — Adjudicate
 
-**Supported.** The article describes Philadelphia's 2013–2017 poverty rate as approximately 26%. A separate ACS estimate for Philadelphia County is 25.8%, which rounds to 26%. The tract results also show that poverty rates increased detectably in some parts of the city: 36 tracts show an increase at the 90% confidence level.
+**Supported.** The article describes Philadelphia's 2013–2017 poverty rate as approximately 26%. A separate ACS estimate for Philadelphia County is 25.8%, which rounds to 26%. The tract results also show that poverty rates increased in some parts of the city: 36 tracts show an increase at the 90% confidence level.
 
-**Not supported by this test.** A broad reading that poverty rose dramatically across Philadelphia as a whole goes further than these tract results show. Only 36 of 376 comparable tracts show a detectable increase; 27 show a detectable decrease, and 313 show no detectable change. This does not disprove an increase in any particular neighborhood. **Cannot be determined:** The article's exact figures for Eastwick, Fairhill, and Holmesburg cannot be checked with this tract analysis because the article does not provide its tract-to-neighborhood boundaries. Its claim about *white* poverty also requires race-specific data, which the overall poverty variables here do not measure.
+**Not supported by this test.** A broad reading that poverty rose dramatically across Philadelphia as a whole goes further than these tract results show. Only 36 of 376 comparable tracts show a detectable increase; 27 show a detectable decrease, and 313 show no detectable change. This does not disprove an increase in any particular neighborhood. 
+
+**Cannot be determined:** The article's exact figures for Eastwick, Fairhill, and Holmesburg cannot be checked with this tract analysis because the article does not provide its tract-to-neighborhood boundaries. Its claim about *white* poverty also requires race-specific data, which the overall poverty variables do not measure.
 
 ```{r}
 #| message: false
