@@ -1,0 +1,64 @@
+---
+title: "Week 5: "
+description: "First impressions, and getting the workflow running."
+date: 2026-09-25
+---
+
+## What We Did
+
+## Key Concepts
+
+## Reflection
+
+## Questions I Still Have
+
+## Week 4 Notes
+
+GEOID med_rent med_inc pct_renters pct_ba n_stations rent_cv geometry
+100   1650     82000   0.71        0.64   3          9.8     ((70.80....))
+
+Where do rents exceed our expectation
+income    rent
+30000  -> 1000
+1000000   3000
+2500000   6000
+
+Y = f(x) + E
+rent, function is unknown, Everything else
+
+rigid ------------------------------------------------------------------------------- flexible
+  |   linear, lassol ridge, logistic, trees, random forest, boosting, neural networks   |
+Easy to explain + interpret
+
+Parametric -> Assume a function from
+Non-parametric
+
+Least Squares Minimize Sum of Squared Errors
+
+m1 <- lm(med_rent ~ med_inc, data=tracts)
+Summary(m1)
+(Intercept)
+med_inc
+
+Noise in Y goes in the Residuals
+  Systematic Variation (not noise)
+Noise in X -> Flattens the slope
+
+Fit vs. Prediction
+R^2 - on the data it was Fit to
+Test/Train
+80% Training 20% Test
+Estimate
+19000->500-400=100^2
+29000->900-1200=300^2
+
+RMSE->Lower is Better
+In your units
+
+Cross Validation (cv)
+K-Fold
+
+Overfitting - learned the noise
+
+How to pick features?
+multicollinearity -> mostly homeless

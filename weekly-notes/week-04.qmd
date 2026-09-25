@@ -32,7 +32,6 @@ Left.join(income_23, income_15, by="GEOID")
 
 get_acs(..., geometry = True)
 
-
 Coordinate Reference Systems (CRS)
 
 Geographic      |     Projected
