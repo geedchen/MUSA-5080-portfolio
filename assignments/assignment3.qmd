@@ -110,7 +110,8 @@ poverty_tested <- poverty_wide %>%
     se_2 = `rate_moe_2013-2017` / 1.645,
     se_diff = sqrt(se_1^2 + se_2^2),
     moe_diff = se_diff * 1.645,
-    significant = abs(change) > moe_diff,
+    z = change / se_diff,
+    significant = abs(z) > 1.645,
     change_pp = change * 100,
     moe_diff_pp = moe_diff * 100
   )
