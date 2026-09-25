@@ -12,7 +12,6 @@ format:
 
 ```{r}
 #| code-fold: false
-# this chunk stays visible
 ```
 
 ```{r}
