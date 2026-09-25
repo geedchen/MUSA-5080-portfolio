@@ -62,3 +62,4 @@ Overfitting - learned the noise
 
 How to pick features?
 multicollinearity -> mostly homeless
+But check your prediction!
