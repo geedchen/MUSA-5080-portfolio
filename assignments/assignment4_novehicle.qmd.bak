@@ -1,0 +1,845 @@
+---
+title: "Assignment: Building Features, Watching What Happens"
+subtitle: "MUSA 5080 · Integrates Weeks 1–5 · Due Friday, October 16"
+author: "Rutong Chen"
+date: today
+format:
+  html:
+    toc: true
+    code-fold: show
+    code-tools: true
+execute:
+  warning: false
+  message: false
+freeze: false
+---
+
+## What this assignment is (and isn't)
+
+This is **not a competition.** There's no leaderboard and no target RMSE. The goal is to practice the full prediction workflow on a question you choose, and to **find out what actually helps.** Some features you're sure will help won't, and some you add on a whim will. Both are findings.
+
+You'll:
+
+1. Choose a tract-level outcome for Philadelphia and check whether it's reliable enough to model (Weeks 2–3).
+2. Fit a baseline model and cross-validate it (Week 5).
+3. Pull data from Philadelphia's open data portal through its API and build spatial features: counts, densities, and distances (Week 4, plus one new tool).
+4. Transform variables with logs, squared terms, and categories. **Watch the October 9 recorded lecture before Part 5.**
+5. Keep a **model log** the whole way through, and compare where your first and final models go wrong.
+
+**Timing.** Parts 1–4 use only what we've covered through Week 5. You can finish them before the October 9 lecture. Part 5 is new material; the lecture explains it, and the instructions below give you the essentials.
+
+**Type the code yourself.** The worked examples show the pattern. Your job is to apply it to your outcome and your data choices.
+
+### Three rules that apply everywhere
+
+::: {.callout-important}
+## 1. Don't drop rows
+Every model is cross-validated on the same tracts with the same folds, so the rows in your model log are comparable. If a new variable has missing values, fill them (for example, 0 for a count, or the median with a note) or choose a different variable. The `cv_rmse()` helper below will stop and tell you if you break this rule.
+
+## 2. Stay inside the time window
+Your outcome comes from the 2019–2023 ACS. Pull open data from **2023 or earlier** (2021–2023 is ideal). Using 2025 data to predict a 2023 outcome uses information from the future, which a real prediction model would never have.
+
+## 3. No leakage
+Don't use any variable that's built from your outcome or measures the same thing another way. Ask yourself: *would an agency trying to predict this outcome for a tract have this variable?* If the answer is "only because it's basically the outcome," leave it out.
+:::
+
+---
+
+## Part 0: Setup
+
+```{r}
+#| label: setup
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(caret)
+
+Sys.getenv("CENSUS_API_KEY") != ""   # should print TRUE
+```
+
+### The cross-validation helper
+
+This function runs 10-fold cross-validation with the same seed every time, so every model in your log is tested on the same folds. **You don't need to change it.** Read it once so you know what it does.
+
+```{r}
+#| label: cv-helper
+ctrl <- trainControl(method = "cv", number = 10)
+
+cv_rmse <- function(formula, data) {
+  df <- if (inherits(data, "sf")) st_drop_geometry(data) else data
+  vars <- all.vars(formula)
+  bad <- vars[sapply(vars, function(v) any(is.na(df[[v]])))]
+  if (length(bad) > 0) {
+    stop("These variables have NAs: ", paste(bad, collapse = ", "),
+         ". Fill them or choose another variable (Rule 1: don't drop rows).")
+  }
+  set.seed(5080)
+  fit <- train(formula, data = df, method = "lm", trControl = ctrl)
+  fit$results$RMSE
+}
+```
+
+### The model log
+
+Every time you fit a new model, add a row. By the end, this table is the story of your assignment.
+
+```{r}
+#| label: log-start
+model_log <- tibble(
+  model   = character(),
+  added   = character(),
+  cv_rmse = numeric(),
+  notes   = character()
+)
+```
+
+---
+
+## Part 1: Choose your outcome
+
+Pick a **tract-level ACS variable for Philadelphia** that matters for policy. Two outcomes are off limits: median gross rent (we did it in lab) and median home value (save it for A4).
+
+Some ideas if you're stuck:
+
+| Outcome | Why an agency might care | ACS table |
+|---|---|---|
+| % of households with no vehicle | Transit planning | B08201 or B25044 |
+| Mean travel time to work | Access to jobs | B08013_001 ÷ B08303_001 |
+| % of people below poverty | Targeting services | B17001 |
+| % of housing units vacant | Housing and blight | B25002 |
+| % of households overcrowded | Housing conditions | B25014 |
+
+Use `load_variables(2023, "acs5")` to browse and find exact variable codes.
+
+### 1A: Pull your outcome and your baseline predictors
+
+Choose **three to five ACS predictors** for your baseline model. They should be things that plausibly relate to your outcome, but **none of them may be built from your outcome** (Rule 3).
+
+```{r}
+#| label: pull
+philly_tracts <- get_acs(
+  geography = "tract",
+  state = "PA",
+  county = "Philadelphia",
+  variables = c(
+    total_pop   = "B01003_001",
+    hh_total    = "B08201_001",   # households (vehicles available table)
+    hh_no_veh   = "B08201_002",   # households with no vehicle available
+    med_inc     = "B19013_001",   # median household income
+    occ_units   = "B25003_001",   # occupied housing units
+    renter_occ  = "B25003_003",   # renter-occupied units
+    units_total = "B25024_001",   # units in structure: total
+    u_1det      = "B25024_002",   # 1-unit, detached
+    u_1att      = "B25024_003",   # 1-unit, attached (rowhomes)
+    avg_hh_size = "B25010_001"    # average household size
+  ),
+  year = 2023,
+  output = "wide",
+  geometry = TRUE
+) %>%
+  st_transform(2272)
+```
+
+```{r}
+#| label: build-outcome
+philly_tracts <- philly_tracts %>%
+  mutate(
+    # outcome: % of households with no vehicle available
+    y = case_when(
+      hh_totalE > 0 ~ hh_no_vehE / hh_totalE * 100,
+      TRUE ~ NA_real_
+    ),
+    # reliability: moe_prop() for a proportion, then x 100 to match y
+    y_moe = case_when(
+      hh_totalE > 0 ~ moe_prop(hh_no_vehE, hh_totalE, hh_no_vehM, hh_totalM) * 100,
+      TRUE ~ NA_real_
+    ),
+    y_cv = case_when(
+      y > 0 ~ (y_moe / 1.645) / y * 100,
+      TRUE ~ NA_real_
+    ),
+    # baseline predictors
+    med_inc     = med_incE,
+    pct_renter  = case_when(
+      occ_unitsE > 0 ~ renter_occE / occ_unitsE * 100,
+      TRUE ~ NA_real_
+    ),
+    pct_single  = case_when(
+      units_totalE > 0 ~ (u_1detE + u_1attE) / units_totalE * 100,
+      TRUE ~ NA_real_
+    ),
+    avg_hh_size = avg_hh_sizeE
+  )
+```
+
+### 1B: Is it reliable enough to model?
+
+Before you commit, check three things.
+
+```{r}
+#| label: reliability
+# How many tracts have no value for your outcome?
+sum(is.na(philly_tracts$y))
+
+# How reliable is it?
+summary(philly_tracts$y_cv)
+
+philly_tracts %>%
+  mutate(reliability = case_when(
+    is.na(y_cv) ~ "Unavailable",   # no households, or a rate of exactly 0
+    y_cv < 12  ~ "High",
+    y_cv <= 40 ~ "Moderate",
+    TRUE       ~ "Low"
+  )) %>%
+  st_drop_geometry() %>%
+  count(reliability)
+
+# What does the distribution look like?
+ggplot(philly_tracts, aes(x = y)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
+
+If more than about a third of tracts have low reliability, consider a different outcome, or one built from larger counts. Write your reasoning either way.
+
+**Answer (2–3 sentences):** What is your outcome, why would an agency want to predict it, and how reliable is it?
+
+*Your answer:* My outcome is the share of households with no vehicle available (`B08201_002` ÷ `B08201_001`). SEPTA or the city's Office of Transportation would want to predict it to find tracts where many households depend on transit, walking, or biking, so that service changes and new investment reach the people with no alternative. The median tract CV is `r round(median(philly_tracts$y_cv, na.rm = TRUE), 1)`%, and `r round(mean(philly_tracts$y_cv > 40, na.rm = TRUE) * 100)`% of tracts with a calculable CV are low reliability (CV above 40%), which is `r if (mean(philly_tracts$y_cv > 40, na.rm = TRUE) < 1/3) "below" else "above"` the one-third threshold, so I `r if (mean(philly_tracts$y_cv > 40, na.rm = TRUE) < 1/3) "keep this outcome" else "keep this outcome but treat the low-reliability tracts with caution"`.
+
+### 1C: Decide which tracts to model
+
+Filter once, here, and never again. Every later step uses `tracts`.
+
+```{r}
+#| label: filter
+tracts <- philly_tracts %>%
+  filter(total_popE > 0,
+         !is.na(y),
+         !is.na(med_inc),
+         !is.na(pct_renter),
+         !is.na(pct_single),
+         !is.na(avg_hh_size))
+
+nrow(philly_tracts)
+nrow(tracts)
+```
+
+**Answer:** How many tracts did you lose, and what kinds of places are they?
+
+*Your answer:* I lose `r nrow(philly_tracts) - nrow(tracts)` of `r nrow(philly_tracts)` tracts. These are tracts with no residents or households, such as Fairmount Park, the airport, and industrial land along the rivers, plus a few institutional tracts (prisons, campuses) where median income is suppressed. None of them has a meaningful share of car-free households, so dropping them does not remove anyone the agency needs to plan for.
+
+---
+
+## Part 2: Baseline model
+
+### 2A: Look first
+
+Plot your outcome against each predictor before modeling (the Week 3 habit).
+
+```{r}
+#| label: look
+# one scatterplot per predictor, side by side
+tracts %>%
+  st_drop_geometry() %>%
+  select(y, med_inc, pct_renter, pct_single, avg_hh_size) %>%
+  pivot_longer(-y, names_to = "predictor", values_to = "value") %>%
+  ggplot(aes(x = value, y = y)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  facet_wrap(~ predictor, scales = "free_x") +
+  theme_minimal() +
+  labs(
+    title = "Car-free households and the baseline predictors",
+    subtitle = "Philadelphia tracts, 2019–2023 ACS",
+    x = NULL,
+    y = "Households with no vehicle (%)"
+  )
+```
+
+### 2B: Fit and log
+
+```{r}
+#| label: m1
+f1 <- y ~ med_inc + pct_renter + pct_single + avg_hh_size
+
+m1 <- lm(f1, data = tracts)
+summary(m1)
+
+cv_m1 <- cv_rmse(f1, tracts)
+
+model_log <- model_log %>%
+  add_row(model = "m1", added = "ACS baseline",
+          cv_rmse = cv_m1,
+          notes = "income, % renter, % 1-unit homes, household size")
+
+model_log
+```
+
+Write the CV RMSE as a sentence, in your outcome's units: "On tracts it hasn't seen, the baseline model misses by about ___."
+
+*Your answer:* On tracts it hasn't seen, the baseline model misses by about `r round(cv_m1, 1)` percentage points of households without a vehicle.
+
+### 2C: Where is the baseline wrong?
+
+Save this map. You'll compare it to your final model's map in Part 6.
+
+```{r}
+#| label: resid-map-1
+tracts <- tracts %>% mutate(resid_m1 = residuals(m1))
+
+ggplot(tracts) +
+  geom_sf(aes(fill = resid_m1), color = NA) +
+  scale_fill_gradient2(low = "#2166ac", mid = "grey95", high = "#b2182b", midpoint = 0) +
+  theme_void() +
+  labs(title = "Baseline model: where it's wrong",
+       subtitle = "Red = actual higher than predicted",
+       fill = "Residual")
+```
+
+**Answer:** Where do the residuals cluster? What might those places have in common that your model doesn't know about? **Use this answer to choose your open data layers in Part 3.**
+
+*Your answer:* The residuals are not speckled. Red tracts (more car-free households than predicted) cluster in North Philadelphia along the Broad Street Line and in West Philadelphia along the Market-Frankford Line, while blue tracts sit in the far Northeast and Northwest, away from rapid transit. [Confirm these locations against the rendered map.] The red places have two things the model doesn't know about. First, transit access: going without a car is practical within walking distance of a subway or el station. Second, concentrated disadvantage beyond median income, such as neighborhood violence and disinvestment, which makes owning and parking a car harder. I therefore pull 2023 rail stations and 2023 shootings in Part 3.
+
+---
+
+## Part 3: Getting data from Philadelphia's open data portal
+
+Many of the city's datasets on [OpenDataPhilly](https://opendataphilly.org) are served through a **Carto SQL API**. You send a SQL query in a URL, and it sends back data. Ask for `format=GeoJSON` and `st_read()` reads the result directly, just like the Indego feed in Week 4.
+
+The pattern:
+
+```
+https://phl.carto.com/api/v2/sql?format=GeoJSON&q=SELECT ... FROM table_name WHERE ...
+```
+
+Three pieces of SQL are all you need:
+
+- `SELECT the_geom, column1, column2` chooses which columns come back. **Always include `the_geom`**, or you get no geometry.
+- `FROM table_name` chooses the dataset.
+- `WHERE ...` filters rows. **Filter in the query, not in R.** Some tables have millions of rows, and pulling everything will be slow or fail.
+
+This helper builds the URL for you. Spaces and symbols in a URL need encoding, and `URLencode()` handles that.
+
+```{r}
+#| label: carto-helper
+carto_get <- function(sql) {
+  url <- paste0("https://phl.carto.com/api/v2/sql?format=GeoJSON&q=", URLencode(sql))
+  st_read(url, quiet = TRUE)
+}
+```
+
+### Finding a table name
+
+On a dataset's OpenDataPhilly page, look for the API link. The table name is the word after `FROM` in the example query. To see what values a column takes before you filter on it, ask for a count in CSV format:
+
+```{r}
+#| label: explore-values
+# What kinds of crime are in the incidents table in 2023?
+url <- paste0("https://phl.carto.com/api/v2/sql?format=csv&q=",
+              URLencode("SELECT text_general_code, COUNT(*) AS n
+                         FROM incidents_part1_part2
+                         WHERE dispatch_date >= '2023-01-01' AND dispatch_date < '2024-01-01'
+                         GROUP BY text_general_code ORDER BY n DESC"))
+read_csv(url)
+```
+
+### Worked example: residential burglaries in 2023
+
+```{r}
+#| label: worked-burglary
+burglary <- carto_get(
+  "SELECT the_geom, text_general_code, dispatch_date
+   FROM incidents_part1_part2
+   WHERE dispatch_date >= '2023-01-01' AND dispatch_date < '2024-01-01'
+     AND text_general_code = 'Burglary Residential'"
+) %>%
+  st_transform(st_crs(tracts))    # Carto returns EPSG 4326; translate immediately
+
+nrow(burglary)
+```
+
+::: {.callout-warning}
+## Check for missing geometry
+Some records have no location. Drop them with `filter(!st_is_empty(burglary))`, and count how many you lost. Every point you drop is a point that won't be counted.
+:::
+
+### Other layers to try
+
+These tables were available on Carto as of this fall. If a query fails, check the dataset's OpenDataPhilly page for the current table name.
+
+| Data | Table | Filter on | Notes |
+|---|---|---|---|
+| Crime incidents | `incidents_part1_part2` | `dispatch_date`, `text_general_code` | Pick specific offense types |
+| Shooting victims | `shootings` | `date_` | Small enough to pull several years |
+| 311 requests | `public_cases_fc` | `requested_datetime`, `service_name` | Use the count query above to see service names |
+| Indego stations | *(not Carto)* `https://www.rideindego.com/stations/json/` | — | The Week 4 feed |
+
+Datasets not on Carto often have a GeoJSON download link on their OpenDataPhilly page. `st_read()` reads those URLs too.
+For example, navigage to https://opendataphilly.org/, find a dataset that you'd like to import. I found city landmarks. On the page there is a link to a GeoJSON file. I simply right-clicked on that hyperlink and copied it and then used st_read() and pasted the link: 
+
+landmarks <- st_read("https://hub.arcgis.com/api/v3/datasets/6b2fe4a0fbe14e0a8e6afceaea230b8e_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1")
+
+### Your turn
+
+Pull **at least two layers** that you think relate to your outcome. Base your choice on your Part 2C answer.
+
+```{r}
+#| label: my-layers
+# Layer 1: shooting victims in 2023 (Carto)
+layer1 <- carto_get(
+  "SELECT the_geom, date_
+   FROM shootings
+   WHERE date_ >= '2023-01-01' AND date_ < '2024-01-01'"
+) %>%
+  st_transform(st_crs(tracts))
+
+nrow(layer1)
+sum(st_is_empty(layer1))   # records with no location
+
+shootings <- layer1 %>% filter(!st_is_empty(layer1))
+nrow(shootings)
+
+# Layer 2: SEPTA rail stations, 2023 GIS data (OpenDataPhilly GeoJSON downloads)
+# High-speed lines (Market-Frankford, Broad Street, Norristown) + Regional Rail
+hs_stations <- st_read(
+  "https://hub.arcgis.com/api/v3/datasets/af52d74b872045d0abb4a6bbbb249453_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1",
+  quiet = TRUE
+)
+rr_stations <- st_read(
+  "https://hub.arcgis.com/api/v3/datasets/cf49c62fbc17430aa818e900556d207e_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1",
+  quiet = TRUE
+)
+
+layer2 <- c(st_geometry(hs_stations), st_geometry(rr_stations)) %>%
+  st_sf() %>%
+  st_transform(st_crs(tracts))
+
+rail_stations <- layer2 %>% filter(!st_is_empty(layer2))
+nrow(rail_stations)
+```
+
+**Answer:** Why these layers? What do you expect them to capture that the ACS variables don't?
+
+*Your answer:* Both layers follow from the Part 2C map. Rail stations measure transit access directly: a household near a subway, el, or Regional Rail station can reach jobs without a car, which none of my ACS predictors describe. I use SEPTA's 2023 station files rather than the live Indego feed, because the Indego feed shows today's stations and would break Rule 2. Shootings stand in for concentrated disadvantage and disinvestment that median income only partly captures; I use 2023 only, inside the time window. Neither layer is built from vehicle ownership, so neither is leakage.
+
+---
+
+## Part 4: Building spatial features
+
+Every feature below reuses a Week 4 tool. The worked examples use burglaries and Indego stations; you build the same types from your own layers.
+
+### 4A: Counting
+
+How many burglaries fall in each tract?
+
+```{r}
+#| label: count
+tracts <- tracts %>%
+  mutate(n_burglary = lengths(st_intersects(., burglary)))
+
+summary(tracts$n_burglary)
+```
+
+A tract with no burglaries gets 0, not NA, so Rule 1 is safe.
+
+### 4B: Density: don't skip this
+
+Raw counts mostly measure **tract size**. A big tract has more of everything. Normalize by area, by population, or by housing units, depending on what makes sense for the thing you're counting.
+
+```{r}
+#| label: density
+tracts <- tracts %>%
+  mutate(
+    area_sqmi         = as.numeric(st_area(.)) / 27878400,   # sq ft in a sq mile
+    burglary_per_sqmi = n_burglary / area_sqmi,
+    burglary_per_1k   = n_burglary / total_popE * 1000
+  )
+```
+
+::: {.callout-note}
+## Per capita in low-population tracts
+If a tract has 40 residents and 3 burglaries, its rate is 75 per 1,000, which is a huge number built on tiny counts. Look at the tracts with the highest per-capita rates before you trust them. This is the Week 3 lesson about small denominators again.
+:::
+
+### 4C: Measuring distance to the nearest thing
+
+How far is each tract from its nearest Indego station? Use the Week 4 pattern: find the nearest feature, then measure to it **element by element**.
+
+```{r}
+#| label: nearest
+stations <- st_read("https://www.rideindego.com/stations/json/", quiet = TRUE) %>%
+  st_transform(st_crs(tracts))
+
+tract_pts <- st_point_on_surface(tracts)   # always inside the tract, unlike a centroid
+
+nearest_idx <- st_nearest_feature(tract_pts, stations)
+
+tracts <- tracts %>%
+  mutate(dist_station_mi = as.numeric(
+    st_distance(tract_pts, stations[nearest_idx, ], by_element = TRUE)) / 5280)
+```
+
+### 4D: Measuring distance to one place
+
+Sometimes the "thing" is a single location, such as City Hall as a stand-in for the center of the regional economy.
+
+```{r}
+#| label: city-hall
+city_hall <- st_sfc(st_point(c(-75.1636, 39.9526)), crs = 4326) %>%
+  st_transform(st_crs(tracts))
+
+tracts <- tracts %>%
+  mutate(dist_ch_mi = as.numeric(st_distance(tract_pts, city_hall)) / 5280)
+```
+
+### 4E: Your turn
+
+Build **at least three spatial features** from your own layers, and use at least two types (count, density, nearest distance, distance to a place). After **each one**, fit a model, cross-validate it, and log it.
+
+```{r}
+#| label: my-spatial
+nearest_rail <- st_nearest_feature(tract_pts, rail_stations)
+
+tracts <- tracts %>%
+  mutate(
+    # nearest distance
+    dist_rail_mi       = as.numeric(
+      st_distance(tract_pts, rail_stations[nearest_rail, ], by_element = TRUE)) / 5280,
+    # count: rail stations within half a mile (2,640 ft)
+    n_rail_halfmile    = lengths(st_is_within_distance(tract_pts, rail_stations, dist = 2640)),
+    # count, then density
+    n_shootings        = lengths(st_intersects(., shootings)),
+    shootings_per_sqmi = n_shootings / area_sqmi
+  )
+
+summary(tracts$dist_rail_mi)
+summary(tracts$n_rail_halfmile)
+summary(tracts$shootings_per_sqmi)
+
+# m2: + distance to the nearest rail station
+f2 <- update(f1, . ~ . + dist_rail_mi)
+cv_m2 <- cv_rmse(f2, tracts)
+
+model_log <- model_log %>%
+  add_row(model = "m2", added = "distance to nearest rail station",
+          cv_rmse = cv_m2,
+          notes = "nearest distance; 2023 SEPTA high-speed + Regional Rail")
+
+# m3: + count of rail stations within half a mile
+f3 <- update(f2, . ~ . + n_rail_halfmile)
+cv_m3 <- cv_rmse(f3, tracts)
+
+model_log <- model_log %>%
+  add_row(model = "m3", added = "rail stations within 1/2 mile",
+          cv_rmse = cv_m3,
+          notes = "count; 0 when none, so no NAs")
+
+# m4: + shooting density
+f4 <- update(f3, . ~ . + shootings_per_sqmi)
+cv_m4 <- cv_rmse(f4, tracts)
+
+model_log <- model_log %>%
+  add_row(model = "m4", added = "shooting density",
+          cv_rmse = cv_m4,
+          notes = "2023 shooting victims per sq mi")
+
+# m5: + distance to City Hall (from 4D)
+f5 <- update(f4, . ~ . + dist_ch_mi)
+cv_m5 <- cv_rmse(f5, tracts)
+
+model_log <- model_log %>%
+  add_row(model = "m5", added = "distance to City Hall",
+          cv_rmse = cv_m5,
+          notes = "distance to one place")
+
+model_log
+
+# Which spatial feature changed CV RMSE the most?
+spatial_steps <- model_log %>%
+  filter(model %in% c("m1", "m2", "m3", "m4", "m5")) %>%
+  mutate(change = cv_rmse - lag(cv_rmse)) %>%
+  filter(model != "m1")
+
+spatial_steps
+
+best_feature  <- spatial_steps$added[which.min(spatial_steps$change)]
+worst_feature <- spatial_steps$added[which.max(spatial_steps$change)]
+
+feature_reason <- c(
+  "distance to nearest rail station" = "it measures directly whether daily trips are possible without a car",
+  "rail stations within 1/2 mile"    = "it overlaps heavily with distance to the nearest station, so it adds little new information",
+  "shooting density"                 = "it captures concentrated disadvantage that median income only partly measures",
+  "distance to City Hall"            = "it overlaps with rail access and housing type, which already describe the urban core"
+)
+```
+
+**Answer:** Which spatial feature helped most? Did any feature you expected to help do nothing, or make CV RMSE worse? Why might that be?
+
+*Your answer:* The feature that helped most was **`r best_feature`**, which changed CV RMSE by `r round(min(spatial_steps$change), 2)` percentage points. A likely reason is that `r feature_reason[best_feature]`. The feature that helped least was **`r worst_feature`** (a change of `r round(max(spatial_steps$change), 2)` points`r if (max(spatial_steps$change) > 0) ", so it made out-of-sample error slightly worse" else ""`). A likely reason is that `r feature_reason[worst_feature]`. A feature can look important in a map and still add nothing in CV if another variable already carries the same information; an extra coefficient then only adds noise.
+
+---
+
+## Part 5: Transforming features
+
+**Watch the October 9 recorded lecture before you start this part.** Below is a summary to work from.
+
+So far, every predictor has entered the model as a straight line: each additional unit of X changes predicted Y by the same amount, everywhere. Transformations let the model bend. For prediction, the question is simply **does the bend lower CV RMSE?** For interpretation, each transformation changes what a coefficient means, so you need to know how to read it.
+
+::: {.callout-tip}
+## Transform predictors, not your outcome
+Keep your outcome `y` untransformed in this assignment. If you model `log(y)`, your CV RMSE comes out in log units and can't be compared to the other rows in your log. (Predicting a logged outcome well requires back-transforming, which is an A4 topic.)
+:::
+
+### 5A: Logs, for skewed predictors
+
+Many urban variables are skewed: a few tracts have huge values, and most have small ones. Income, density, and counts are typical. A log compresses the long tail, so a model can use the difference between 1 and 10 as well as the difference between 100 and 1,000.
+
+```{r}
+#| label: log-look
+ggplot(tracts, aes(x = burglary_per_sqmi)) + geom_histogram(bins = 30) + theme_minimal()
+ggplot(tracts, aes(x = log1p(burglary_per_sqmi))) + geom_histogram(bins = 30) + theme_minimal()
+```
+
+::: {.callout-warning}
+## log(0) doesn't exist
+`log(0)` is `-Inf`, and it will break your model. Counts and densities often include zeros. Use `log1p(x)`, which computes `log(x + 1)`, for anything that can be 0.
+:::
+
+**Reading the coefficient:** when a predictor is logged, a **1% increase** in X goes with a change of about **β/100** in Y, in Y's units. With `log1p`, this reading is approximate for small values of X.
+
+### 5B: Squared terms, for curves
+
+If your scatterplot bends (rising and then flattening, or falling and then rising), a squared term lets the line curve. Write it with `I()`, which tells R to do the arithmetic rather than read `^` as formula syntax.
+
+```{r}
+#| label: squared-example
+m_sq <- lm(y ~ dist_ch_mi + I(dist_ch_mi^2), data = tracts)
+summary(m_sq)
+```
+
+**Reading the coefficient:** you can't read either coefficient alone anymore. The effect of X depends on where you are along X. A positive linear term with a negative squared term means Y rises with X and then levels off or turns down. Plot the fitted curve to see it:
+
+```{r}
+#| label: squared-plot
+ggplot(tracts, aes(x = dist_ch_mi, y = y)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2), se = FALSE, color = "red") +
+  theme_minimal()
+```
+
+### 5C: Categorical variables
+
+Sometimes a number works better as groups, either because the relationship isn't smooth or because the categories are meaningful. You can make categories from any variable with `case_when()` or `cut()`, and then make sure R treats them as a **factor**.
+
+```{r}
+#| label: categorical-example
+tracts <- tracts %>%
+  mutate(
+    ring = case_when(
+      dist_ch_mi < 2 ~ "Core",
+      dist_ch_mi < 5 ~ "Inner",
+      TRUE           ~ "Outer"
+    ),
+    ring = factor(ring, levels = c("Core", "Inner", "Outer"))
+  )
+
+tracts %>% st_drop_geometry() %>% count(ring)
+
+m_cat <- lm(y ~ ring, data = tracts)
+summary(m_cat)
+```
+
+**Reading the coefficients:** R turns a factor with k categories into k − 1 dummy variables. The category left out is the **reference level** (here, "Core," the first level). Each coefficient is the **difference from the reference**: `ringOuter` is how much higher or lower predicted Y is in outer tracts *compared to core tracts*, holding everything else in the model constant. To change the reference, use `relevel(ring, ref = "Outer")`.
+
+::: {.callout-note}
+## Check your group sizes
+If a category has only a handful of tracts, its coefficient is unstable, and in cross-validation some folds may not contain it at all. Aim for at least 20 tracts per category.
+:::
+
+### 5D: Your turn
+
+Try **at least one of each**: a log, a squared term, and a categorical variable. Choose which variables to transform based on your plots, not at random. Log each model.
+
+```{r}
+#| label: my-transforms
+# Look first: income and shooting density are both right-skewed
+ggplot(tracts, aes(x = med_inc)) + geom_histogram(bins = 30) + theme_minimal()
+ggplot(tracts, aes(x = shootings_per_sqmi)) + geom_histogram(bins = 30) + theme_minimal()
+
+# Log: log(income) (never 0 after the filter) and log1p(shooting density) (can be 0)
+f_log <- y ~ log(med_inc) + pct_renter + pct_single + avg_hh_size +
+  dist_rail_mi + n_rail_halfmile + log1p(shootings_per_sqmi) + dist_ch_mi
+cv_m6 <- cv_rmse(f_log, tracts)
+
+model_log <- model_log %>%
+  add_row(model = "m6", added = "log of income and shooting density",
+          cv_rmse = cv_m6,
+          notes = "log() for income; log1p() because density can be 0")
+
+# Squared term: car-free share falls fast near the center, then flattens (5B plot)
+f_sq <- update(f_log, . ~ . + I(dist_ch_mi^2))
+cv_m7 <- cv_rmse(f_sq, tracts)
+
+model_log <- model_log %>%
+  add_row(model = "m7", added = "squared distance to City Hall",
+          cv_rmse = cv_m7,
+          notes = "m6 + I(dist_ch_mi^2)")
+
+# Categorical: Core / Inner / Outer ring from 5C (reference = Core)
+tracts %>% st_drop_geometry() %>% count(ring)   # check: at least 20 tracts each
+
+f_cat <- update(f_log, . ~ . + ring)
+cv_m8 <- cv_rmse(f_cat, tracts)
+m_cat_fit <- lm(f_cat, data = tracts)
+coef(m_cat_fit)[c("ringInner", "ringOuter")]
+
+model_log <- model_log %>%
+  add_row(model = "m8", added = "ring (Core / Inner / Outer)",
+          cv_rmse = cv_m8,
+          notes = "m6 + ring factor; reference = Core")
+
+# All three together
+f_all <- update(f_log, . ~ . + I(dist_ch_mi^2) + ring)
+cv_m9 <- cv_rmse(f_all, tracts)
+
+model_log <- model_log %>%
+  add_row(model = "m9", added = "log + squared + ring",
+          cv_rmse = cv_m9,
+          notes = "m6 + I(dist_ch_mi^2) + ring")
+
+model_log
+
+transform_steps <- tibble(
+  transform = c("the logs", "the squared term", "the ring categories"),
+  change    = c(cv_m6 - cv_m5, cv_m7 - cv_m6, cv_m8 - cv_m6)
+)
+transform_steps
+best_transform <- transform_steps$transform[which.min(transform_steps$change)]
+```
+
+**Answer:** Which transformation helped most? For your categorical variable, write one sentence reading one of its coefficients correctly, naming the reference level.
+
+*Your answer:* Of the three, **`r best_transform`** helped most, changing CV RMSE by `r round(min(transform_steps$change), 2)` percentage points (the logs are compared with m5; the squared term and the ring are each compared with m6). For the ring variable, the reference level is **Core** (within 2 miles of City Hall): holding the other variables in m8 constant, an Outer-ring tract has a predicted no-vehicle share about `r abs(round(coef(m_cat_fit)["ringOuter"], 1))` percentage points `r if (coef(m_cat_fit)["ringOuter"] < 0) "lower" else "higher"` than a Core tract.
+
+---
+
+## Part 6: Your final model
+
+Combine the features and transformations that earned their place, **judged by CV RMSE, not p-values.**
+
+```{r}
+#| label: final
+# Keep whichever combination earned its place by CV RMSE, not by p-values
+candidates <- tibble(
+  model   = c("m5", "m6", "m7", "m8", "m9"),
+  formula = list(f5, f_log, f_sq, f_cat, f_all),
+  cv      = c(cv_m5, cv_m6, cv_m7, cv_m8, cv_m9)
+)
+candidates %>% select(model, cv)
+
+final_pick <- candidates$model[which.min(candidates$cv)]
+f_final <- candidates$formula[[which.min(candidates$cv)]]
+f_final
+
+m_final <- lm(f_final, data = tracts)
+summary(m_final)
+
+cv_final <- cv_rmse(f_final, tracts)
+
+model_log <- model_log %>%
+  add_row(model = "final", added = paste("lowest CV RMSE of m5–m9:", final_pick),
+          cv_rmse = cv_final,
+          notes = "ACS baseline + rail access + shootings + transformations")
+
+model_log
+```
+
+### Where is the final model wrong?
+
+```{r}
+#| label: resid-map-2
+tracts <- tracts %>% mutate(resid_final = residuals(m_final))
+
+ggplot(tracts) +
+  geom_sf(aes(fill = resid_final), color = NA) +
+  scale_fill_gradient2(low = "#2166ac", mid = "grey95", high = "#b2182b", midpoint = 0) +
+  theme_void() +
+  labs(title = "Final model: where it's wrong",
+       subtitle = "Red = actual higher than predicted",
+       fill = "Residual")
+```
+
+Put your two residual maps side by side, or put them next to each other in the rendered document. Did the clusters from Part 2C shrink? Where did they stay?
+
+```{r}
+#| label: resid-compare
+#| fig-width: 10
+#| fig-height: 6
+tracts %>%
+  select(resid_m1, resid_final) %>%
+  pivot_longer(c(resid_m1, resid_final), names_to = "model", values_to = "residual") %>%
+  mutate(model = factor(recode(model,
+                               resid_m1    = "Baseline (m1)",
+                               resid_final = "Final model"),
+                        levels = c("Baseline (m1)", "Final model"))) %>%
+  ggplot() +
+  geom_sf(aes(fill = residual), color = NA) +
+  scale_fill_gradient2(low = "#2166ac", mid = "grey95", high = "#b2182b", midpoint = 0) +
+  facet_wrap(~ model) +
+  theme_void() +
+  labs(title = "Where the model is wrong, before and after",
+       subtitle = "Red = more car-free households than predicted",
+       fill = "Residual (pp)")
+
+c(sd_m1 = sd(tracts$resid_m1), sd_final = sd(tracts$resid_final))
+```
+
+*Your answer:* The spread of the residuals falls from a standard deviation of `r round(sd(tracts$resid_m1), 1)` percentage points in the baseline to `r round(sd(tracts$resid_final), 1)` in the final model. [After rendering, describe which red clusters from Part 2C faded (for example, tracts along the Broad Street and Market-Frankford lines) and which remain.]
+
+### Are the biggest misses in the least reliable tracts?
+
+```{r}
+#| label: fog
+ggplot(tracts, aes(x = y_cv, y = abs(resid_final))) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(se = FALSE) +
+  labs(x = "CV of your outcome estimate (%)", y = "Size of the miss") +
+  theme_minimal()
+```
+
+---
+
+## Part 7: Reflection (about 300 words)
+
+Answer in prose, drawing on your model log (incorporate our words of the day for bonus points. just kidding):
+
+1. **What helped, and what didn't?** Name the feature that lowered CV RMSE the most and the one that disappointed you most. Offer a reason for each.
+2. **Read one coefficient twice.** Choose a variable in your final model. Give its β̂ reading and its ŷ reading in one sentence each.
+3. **What's still missing?** Look at your final residual map. Name one thing about those places you'd want to measure next, and where you might get the data.
+4. **How much of the remaining error might be uncertainty or statistical noise?** Use your last plot.
+
+```{r}
+#| label: reflection-numbers
+#| include: false
+cv_gain       <- cv_m1 - cv_final
+noise_share   <- mean(abs(tracts$resid_final) < tracts$y_moe, na.rm = TRUE) * 100
+cv_resid_cor  <- cor(tracts$y_cv, abs(tracts$resid_final), use = "complete.obs")
+renter_coef   <- coef(m_final)["pct_renter"]
+```
+
+*Your answer:*
+
+My baseline model, built only from income, tenure, housing type, and household size, missed car-free shares by about `r round(cv_m1, 1)` percentage points on tracts it had not seen. The final model (`r final_pick`) lowers that to `r round(cv_final, 1)`, a gain of `r round(cv_gain, 1)` points. The spatial feature that helped most was `r best_feature`, likely because `r feature_reason[best_feature]`. The most disappointing was `r worst_feature`, likely because `r feature_reason[worst_feature]`. The model log taught me that a variable can look important on a map and still add nothing once its neighbors are in the model.
+
+Take `pct_renter`. The β̂ reading is that, holding the other variables constant, a tract with 10 more percentage points of renter households has a car-free share about `r abs(round(renter_coef * 10, 1))` points `r if (renter_coef > 0) "higher" else "lower"`, but this is an association, not evidence that renting causes people to give up cars. The ŷ reading is that renter share stays in the model because it carries information about car ownership that lowers out-of-sample error, whether or not the relationship is causal.
+
+The final residual map still shows clusters [name them after rendering]. Next I would measure bus service: stop frequency from SEPTA's 2023 GTFS schedules, since my rail layers ignore the bus network most car-free households rely on. I would also add college enrollment (ACS table B14007), because student neighborhoods are car-free for reasons income cannot explain.
+
+Some of the remaining error is fog, not model failure. For `r round(noise_share)`% of tracts, the final model's miss is smaller than the outcome's own 90% margin of error, so the model cannot be judged wrong there. The correlation between the outcome's CV and the size of the miss is `r round(cv_resid_cor, 2)`, so `r if (cv_resid_cor > 0.2) "the largest misses tend to occur where the estimate is least reliable" else "large misses are not concentrated in the noisiest tracts, so most of the remaining error is a modeling problem"`.
+
+---
+
+## Submitting
+
+Render this document to HTML and submit the link on Canvas by Friday, October 16. I'll miss you all terribly while I'm away. Please send letters or correspondences to my office mailbox. 
+
