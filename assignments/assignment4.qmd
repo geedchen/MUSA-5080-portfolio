@@ -16,7 +16,7 @@ freeze: false
 
 ## The question
 
-Philadelphia is a city of both renters and homeowners, and the balance between them changes from neighborhood to neighborhood. In this analysis, I predict the **share of occupied housing units that are renter-occupied** in each census tract. I start with a baseline model built from the American Community Survey, add spatial features built from the city's open data portal, and transform variables. I keep a model log the whole way through to see which changes actually lower out-of-sample error.
+Philadelphia has both renters and homeowners, and the mix changes from one neighborhood to the next. In this analysis, I try to predict the **share of homes that are rented** in each census tract. I start with a simple model that uses Census data, then add new features made from the city's open data, and then reshape some variables. After each change, I record how well the model predicts tracts it has not seen, so I can tell which changes really help.
 
 ---
 
@@ -32,7 +32,7 @@ library(caret)
 Sys.getenv("CENSUS_API_KEY") != ""
 ```
 
-Every model is cross-validated with the helper below. It runs 10-fold cross-validation with the same seed every time, so every model in the log is tested on the same folds. It stops if any variable in the formula has missing values, so no rows are dropped by accident.
+I test every model with the helper below. It splits the tracts into 10 groups, trains the model on 9 of them, and checks how far off it is on the 10th, repeating this 10 times. It uses the same split every time, so all models are tested fairly. It also stops if a variable has missing values, so no tracts are dropped by mistake.
 
 ```{r}
 #| label: cv-helper
@@ -68,7 +68,7 @@ model_log <- tibble(
 
 ### 1A: Pulling the outcome and baseline predictors
 
-My outcome is the renter share: renter-occupied units (`B25003_003`) divided by all occupied units (`B25003_001`). For the baseline, I use four ACS predictors that plausibly relate to whether households rent: median household income, median age, average household size, and the share of adults with a bachelor's degree or higher. I leave out housing-type variables such as units in structure (`B25024`), because the number of apartments in a building measures tenure almost directly, which would be leakage.
+My outcome is the renter share: the number of renter households (`B25003_003`) divided by all occupied homes (`B25003_001`). For the baseline model, I use four Census variables that should be related to renting: median household income, median age, average household size, and the share of adults with a bachelor's degree or higher. I do not use the number of units in a building (`B25024`). Apartment buildings are almost always rented, so that variable would nearly give away the answer. This is called leakage.
 
 ```{r}
 #| label: pull
@@ -97,7 +97,7 @@ philly_tracts <- get_acs(
   st_transform(2272)
 ```
 
-Because the outcome is a proportion, I use `moe_prop()` for its margin of error rather than the MOE of the renter count. I then calculate the coefficient of variation (CV) from the standard error.
+The outcome is a percentage, so I use `moe_prop()` to get its margin of error. I then use it to calculate the coefficient of variation (CV), which shows how reliable each estimate is.
 
 ```{r}
 #| label: build-outcome
@@ -127,7 +127,7 @@ philly_tracts <- philly_tracts %>%
 
 ### 1B: Is it reliable enough to model?
 
-I classify CV values below 12% as reliable, 12%–40% as somewhat reliable, and above 40% as unreliable.
+A CV below 12% means the estimate is reliable, 12% to 40% means somewhat reliable, and above 40% means unreliable.
 
 ```{r}
 #| label: reliability
@@ -156,11 +156,11 @@ ggplot(philly_tracts, aes(x = y)) +
   )
 ```
 
-The renter share is built from large counts, because every occupied unit is either owned or rented. Of the 408 tracts, 20 have no value for the outcome. The median tract CV is 15.1%: 111 tracts are reliable, 271 are somewhat reliable, only 5 are unreliable, and 21 have no calculable CV. Five unreliable tracts is about 1% of the tracts with a CV, far below the one-third threshold, so the outcome is reliable enough to model. Unreliable estimates are concentrated in tracts where very few households rent, because a small share is divided into a similar-sized margin of error. The city's Division of Housing and Community Development would want to predict this outcome to target tenant protection programs, such as eviction diversion and rental repair assistance, toward the neighborhoods where renters live.
+The renter share is fairly reliable because it is based on large numbers: every occupied home is either owned or rented. Of the 408 tracts, 20 have no value. The median CV is 15.1%. 111 tracts are reliable, 271 are somewhat reliable, only 5 are unreliable, and 21 have no CV. Five unreliable tracts is only about 1%, far below the one-third limit, so this outcome is safe to model. The few unreliable tracts are places where very few people rent. A city agency, such as the Division of Housing and Community Development, could use this prediction to find renter neighborhoods and target programs like eviction prevention and home repair help.
 
 ### 1C: Deciding which tracts to model
 
-I filter once here, and every later step uses `tracts`.
+I filter the tracts once here. Every later step uses the same `tracts` data.
 
 ```{r}
 #| label: filter
@@ -176,7 +176,7 @@ nrow(philly_tracts)
 nrow(tracts)
 ```
 
-I lose 27 of 408 tracts, leaving 381 to model. These are places with no residents or households, such as Fairmount Park, the airport, and industrial land along the rivers, plus a few institutional tracts where median income is suppressed. None of them contains a meaningful number of renter households.
+I drop 27 of 408 tracts and keep 381. The dropped tracts have no residents or households, such as Fairmount Park, the airport, and industrial areas along the rivers, or they are missing income data. Almost no renters live in them.
 
 ---
 
@@ -228,7 +228,7 @@ model_log <- model_log %>%
 model_log
 ```
 
-On tracts it hasn't seen, the baseline model misses the renter share by about 13.4 percentage points. Its in-sample R² is 0.58, so the four ACS variables already explain a good share of the variation.
+On tracts it has not seen, the baseline model is off by about 13.4 percentage points on average. Its R² is 0.58, which means these four Census variables already explain more than half of the differences in renter share between tracts.
 
 ### 2C: Where the baseline is wrong
 
@@ -245,7 +245,7 @@ ggplot(tracts) +
        fill = "Residual")
 ```
 
-The residuals are not randomly scattered. The clearest blue cluster (fewer renters than predicted) runs along the Delaware River north of Center City, and there are more blue tracts in parts of the Northwest. Red tracts (more renters than predicted) cluster in South Philadelphia, including the large tract along the southern Delaware waterfront, in Manayunk and Roxborough on the northwest edge of the city, and in parts of the lower Northeast. These places differ in their housing and neighborhood conditions more than in who lives there. Along the Delaware, long-time homeowners likely live next to newer, highly educated residents, so the model expects more renters than there are; in South Philadelphia and Manayunk, many rowhomes are rented to young adults. The baseline also does not know where students live or about neighborhood conditions beyond median income. I therefore pull university campuses, residential burglaries, and shootings in Part 3.
+The errors are not random; they form clusters. Blue means fewer renters than predicted, and red means more renters than predicted. The clearest blue area runs along the Delaware River north of Center City, with more blue tracts in parts of the Northwest. Red areas appear in South Philadelphia, including the large tract on the southern waterfront, in Manayunk and Roxborough, and in parts of the lower Northeast. One possible reason: along the Delaware, newer residents with college degrees live next to long-time homeowners, so the model expects more renters than there really are. In South Philadelphia and Manayunk, many rowhouses are rented to young adults. The model also does not know where students live or how safe a neighborhood is. So in Part 3, I add university campuses, burglaries, and shootings.
 
 ---
 
@@ -259,7 +259,7 @@ carto_get <- function(sql) {
 }
 ```
 
-I pull three layers, all from 2023 or earlier, so no information comes from after the outcome's time window. I count records with no location and drop them.
+I pull three data layers. All of them are from 2023 or earlier, so the model does not use information from the future. I count the records that have no location and remove them.
 
 ```{r}
 #| label: my-layers
@@ -289,7 +289,7 @@ sum(st_is_empty(shootings))
 shootings <- shootings %>% filter(!st_is_empty(shootings))
 
 # Layer 3: university and college campuses
-universities <- st_read("https://hub.arcgis.com/api/v3/datasets/8ad76bc179cf44bd9b1c23d6f66f57d1_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1") %>%
+universities <- st_read("https://hub.arcgis.com/api/v3/datasets/8ad76bc179cf44bd9b1c23d6f66f57d1_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1", quiet = TRUE) %>%
   st_transform(st_crs(tracts))
 
 nrow(universities)
@@ -297,9 +297,9 @@ sum(st_is_empty(universities))
 universities <- universities %>% filter(!st_is_empty(universities))
 ```
 
-I lose 119 of 3,800 burglary records and 1 of 1,673 shooting records because they have no location. The campus file has 644 features, and none is missing a location.
+119 of 3,800 burglary records and 1 of 1,673 shooting records have no location, so I remove them. All 644 campus records have a location.
 
-All three layers follow from the Part 2C map. University campuses capture student housing, which drives renting in a way that median age and education only partly describe. The campus file is updated as needed rather than by year, but the campuses existed long before 2023, so it does not bring in information from the future. Residential burglaries and shootings stand in for neighborhood conditions and disinvestment that median income misses. None of these layers is built from tenure, so none is leakage.
+I chose these layers based on the Part 2C map. Campuses show where students live, and students are mostly renters. The campus file has no year, but these campuses existed well before 2023, so it does not break the time rule. Burglaries and shootings describe neighborhood conditions that income alone does not show. None of these layers is made from renter data, so there is no leakage.
 
 ---
 
@@ -307,7 +307,7 @@ All three layers follow from the Part 2C map. University campuses capture studen
 
 ### 4A: Counting and density
 
-Counts are divided by tract area, because raw counts mostly measure tract size.
+I divide the counts by tract area. Otherwise, bigger tracts would simply have more of everything.
 
 ```{r}
 #| label: density
@@ -387,16 +387,16 @@ model_log <- model_log %>%
           cv_rmse = cv_rmse(f5, tracts),
           notes = "distance to one place")
 
-model_log
+model_log %>% mutate(cv_rmse = round(cv_rmse, 2)) %>% print(width = Inf)
 ```
 
-None of the spatial features improved much on the baseline. Burglary density was the only one that lowered CV RMSE, from 13.45 (m2) to 13.38 (m3), likely because residential burglaries are most common where housing is dense and many units sit close together, which is where renters live. Even so, m3 did not beat the baseline's 13.35. The feature that helped least was distance to the nearest campus, which raised CV RMSE from 13.35 to 13.45. The campus file contains 644 separate features, including small buildings spread across the city, so most tracts are close to some campus feature and the distance does not single out student neighborhoods. Median age and the share of adults with a degree already capture much of the student effect. Shooting density (13.40) and distance to City Hall (13.43) also added nothing as straight-line terms, likely because income and education already describe the same neighborhood differences.
+None of the spatial features helped much. Burglary density was the only one that lowered the error, from 13.45 to 13.38. This may be because burglaries happen more where homes are packed closely together, which is also where many renters live. Even so, it did not beat the baseline's 13.35. Distance to the nearest campus helped the least: it raised the error from 13.35 to 13.45. The campus file has 644 separate buildings spread across the city, so almost every tract is close to one, and the distance does not point to student neighborhoods. Age and education already capture most of the student effect. Shooting density (13.40) and distance to City Hall (13.43) did not help either, probably because income and education already describe the same neighborhood differences.
 
 ---
 
 ## Part 5: Transforming features
 
-I keep the outcome untransformed so every row in the log stays in percentage points.
+I do not change the outcome itself, so all errors stay in percentage points and can be compared.
 
 ### 5A: Logs
 
@@ -407,7 +407,7 @@ ggplot(tracts, aes(x = burglary_per_sqmi)) + geom_histogram(bins = 30) + theme_m
 ggplot(tracts, aes(x = log1p(burglary_per_sqmi))) + geom_histogram(bins = 30) + theme_minimal()
 ```
 
-Income and both densities are right-skewed. I use `log()` for income, which is never 0 after the filter, and `log1p()` for the densities, which can be 0.
+Income and both densities are skewed: most tracts have small values and a few have very large ones. A log shrinks those large values. I use `log()` for income, which is never 0, and `log1p()` for the densities, which can be 0.
 
 ```{r}
 #| label: m-log
@@ -468,16 +468,16 @@ model_log <- model_log %>%
           cv_rmse = cv_rmse(f_cat, tracts),
           notes = "m6 + ring; reference = Core")
 
-model_log
+model_log %>% mutate(cv_rmse = round(cv_rmse, 2)) %>% print(width = Inf)
 ```
 
-The transformation that helped most was the log, which lowered CV RMSE from 13.43 (m5) to 13.11 (m6). Adding the squared distance to City Hall lowered it further to 12.96 (m7), while the ring categories barely changed it (13.09 in m8, compared with 13.11 in m6). For the ring variable, the reference level is Core, tracts within 2 miles of City Hall. Holding the other variables in m8 constant, an Outer-ring tract has a predicted renter share about 6.5 percentage points lower than a Core tract.
+The log helped the most. It lowered the error from 13.43 (m5) to 13.11 (m6). Adding the squared distance to City Hall lowered it again to 12.96 (m7). The rings barely changed it (13.09 in m8 versus 13.11 in m6). For the ring variable, Core (within 2 miles of City Hall) is the comparison group. If everything else in m8 is the same, an Outer-ring tract has a renter share about 6.5 percentage points lower than a Core tract.
 
 ---
 
 ## Part 6: The final model
 
-I keep the features and transformations that lowered CV RMSE in the model log, judged by CV RMSE rather than p-values. The final model is m7, which has the lowest CV RMSE (12.96). I drop the ring categories because they lowered CV RMSE by only 0.02 in m8 and overlap with the distance terms. I keep all four spatial features: on their own they did not help, but with the logs and the squared term they are part of the model with the lowest out-of-sample error.
+I choose the final model by its prediction error, not by p-values. The final model is m7, which has the lowest error (12.96). I leave out the rings because they lowered the error by only 0.02 and repeat what the distance variables already say. I keep all four spatial features. Alone they did not help, but together with the logs and the squared term they are part of the best model.
 
 ```{r}
 #| label: final
@@ -493,7 +493,7 @@ model_log <- model_log %>%
           cv_rmse = cv_rmse(f_final, tracts),
           notes = "logs + squared distance to City Hall; ring dropped")
 
-model_log
+model_log %>% mutate(cv_rmse = round(cv_rmse, 2)) %>% print(width = Inf)
 ```
 
 ### Where the final model is wrong
@@ -514,7 +514,7 @@ sd(tracts$resid_m1)
 sd(tracts$resid_final)
 ```
 
-Compared with the baseline map in Part 2C, the final model's errors are smaller overall: the standard deviation of the residuals falls from 13.3 to 12.6 percentage points. The blue strip along the Delaware River north of Center City and the red tract on the southern Delaware waterfront both fade. Red clusters stay in Manayunk and Roxborough and in parts of the lower Northeast, and some blue tracts remain in the Northwest.
+Compared with the baseline map in Part 2C, the final model's errors are smaller overall. The typical error (the standard deviation of the residuals) drops from 13.3 to 12.6 percentage points. The blue strip along the Delaware River and the red tract on the southern waterfront become lighter. Red clusters remain in Manayunk, Roxborough, and parts of the lower Northeast, and some blue tracts remain in the Northwest.
 
 ### Are the biggest misses in the least reliable tracts?
 
@@ -534,10 +534,10 @@ mean(abs(tracts$resid_final) < tracts$y_moe, na.rm = TRUE)
 
 ## Part 7: Reflection
 
-My baseline model, built from income, median age, household size, and education, missed the renter share by about 13.4 percentage points on tracts it had not seen. The final model lowers that to 13.0, a modest gain of about 0.4 points. The most surprising part of the model log was that the spatial features barely helped. Burglary density was the only one that lowered CV RMSE, likely because burglaries concentrate where housing is dense. The most disappointing was distance to the nearest campus, which made predictions worse, likely because the campus file includes many small buildings spread across the city and the ACS variables already capture students through age and education. Most of the gain came from transformations instead: logging income and the densities, and letting distance to City Hall curve. The model log showed me that a variable can look important on a map and still add little once related variables are in the model.
+My baseline model was off by about 13.4 percentage points on tracts it had not seen. The final model lowers this to 13.0, a small improvement of about 0.4 points. What surprised me most was that the spatial features barely helped. Burglary density was the only one that helped a little, maybe because burglaries are more common where homes are packed closely together. The most disappointing was distance to the nearest campus, which made the model worse. The campus file has many small buildings across the city, and age and education already capture students. Most of the improvement came from reshaping the variables instead: taking logs and letting the distance to City Hall curve. I learned that a variable can look useful on a map but add little once similar variables are already in the model.
 
-Take median age. The β̂ reading is that, holding the other variables constant, a tract whose median age is 10 years older has a predicted renter share about 9.4 percentage points lower (a coefficient of −0.94 per year); this is an association, not evidence that aging causes people to buy homes. The ŷ reading is that median age stays in the model because it carries information about tenure that lowers out-of-sample error, whether or not the relationship is causal.
+Take median age. The β̂ reading: if two tracts are the same in every other way, the one whose median age is 10 years older is predicted to have about 9.4 percentage points fewer renters (the coefficient is −0.94 per year). This shows a relationship, not a cause; getting older does not by itself make people buy homes. The ŷ reading: median age stays in the model because it helps predict the renter share more accurately, whether or not it is a cause.
 
-The final residual map still shows clusters in Manayunk and Roxborough and in parts of the lower Northeast, where there are more renters than predicted. Next I would measure the age and size of the housing stock, using building age and lot size from the Office of Property Assessment's property data, because older, subdivided rowhomes are often rented even where incomes are moderate. I would also add college enrollment from the ACS (table B14007) to separate student renters from long-term renters.
+The final map still shows clusters in Manayunk, Roxborough, and parts of the lower Northeast, where there are more renters than predicted. Next, I would add the age and size of buildings from the Office of Property Assessment, because old rowhouses split into apartments are often rented even where incomes are moderate. I would also add college enrollment from the Census (table B14007) to tell students apart from long-term renters.
 
-The last plot shows almost no relationship between the reliability of the estimate and the size of the miss. Large misses occur at every level of CV, some of the largest are in tracts with reliable estimates, and the correlation between the two is only about 0.06. At the same time, for about 60% of tracts the final model's miss is smaller than the outcome's own 90% margin of error, so the model cannot be judged wrong there. Survey noise is part of the remaining error, but the largest misses look like a modeling problem rather than fog.
+The last plot shows that the size of the error has almost nothing to do with how reliable the estimate is. Big errors happen at every CV level, and the correlation is only about 0.06. Still, for about 60% of tracts, the model's error is smaller than the estimate's own margin of error, so in those tracts the error could just be survey noise. But the biggest errors seem to come from the model missing something, not from noisy data.
