@@ -1,0 +1,50 @@
+---
+title: "Week 8: A few odds & ends: LISA, the case of RealPage, etc."
+description: "First impressions, and getting the workflow running."
+date: 2026-10-23
+---
+
+## What We Did
+
+## Key Concepts
+
+## Reflection
+
+## Questions I Still Have
+
+## Week 8 Notes
+
+Moran's I of the residuals - do errors cluster?
+In your model log, it should fall as you add features.
+
+But a single number can't tell you where to look.
+
+House.  Residual.  Deviation(z)    Neighbors.  Neighbors' average z (row-standardized weights)
+A       +100k      +84             B           +64
+B       +80k       +64             A,C         +44
+C       +20k       +4              B,D         -1
+D       -50k       -66             C,E         -41
+E       -70k       -86             D           -66
+
+Local Moran's I: One house at a time
+Ii=
+m2=
+
+Ii     Quadrant
+1.17   High-High
+0.61   High-High
+0.00   (nothing to see)
+0.59   Low-Low
+1.24   Low-Low
+
+Four quadrants, read as errors
+Residual = actual-predicted. High = we guessed too low
+
+                         Neighbors under-predicted       Neighbors over-predicted
+I'm under-predicted      High-High                       High-Low
+I'm over-predicted       Low-High                        Low-Low
+
+HH: I'm > mean   Neighbors>mean
+HL: I'm > mean   Neighbors<mean
+LH: I'm < mean   Neighbors>mean
+LL: Pocket of over-prediction

@@ -1,0 +1,16 @@
+---
+title: "Week 7: Where Is the Model Wrong?"
+description: "First impressions, and getting the workflow running."
+date: 2026-10-16
+---
+
+## What We Did
+
+## Key Concepts
+
+## Reflection
+
+## Questions I Still Have
+
+## Week 7 Notes
+
