@@ -1,0 +1,1203 @@
+---
+title: "A Nightmare in Regression Class"
+subtitle: "Assignment 5 | Chicago House Price Prediction"
+author: "A Nightmare in Regression Class — Research Team"
+date: "2026-10-30"
+
+format:
+  html:
+    theme: darkly
+    css: assignment5-dark.css
+    toc: true
+    toc-location: left
+    toc-title: "Explore the Nightmare"
+    toc-depth: 3
+    smooth-scroll: true
+    code-fold: true
+    code-summary: "Reveal the Code"
+    number-sections: true
+    page-layout: full
+    mainfont: "Georgia"
+
+title-block-banner: "#101b19"
+title-block-banner-color: "#d8aa63"
+---
+
+<div style="text-align:center; margin:35px auto 50px;">
+
+  <img
+    src="images/A%20Nightmare%20in%20Regression%20Class.png"
+    alt="A Nightmare in Regression Class — Scorpion Logo"
+    style="width:100%; max-width:850px; height:auto;
+           border-radius:16px;
+           border:1px solid #b98549;
+           box-shadow:0 0 35px rgba(194,119,44,0.35);"
+  >
+
+  <p style="color:#d8aa63; letter-spacing:3px; margin-top:20px;">
+    MUSA 5080 | PUBLIC POLICY ANALYTICS
+  </p>
+
+</div>
+
+
+## The Nightmare Begins
+
+*Chicago House Price Prediction — Team Research Report*
+
+Welcome to **A Nightmare in Regression Class**.
+
+This report explores Chicago housing prices through regression modeling, spatial feature engineering, and predictive evaluation.
+
+## Part 0: Setup (provided)
+
+These helpers are to help you get off the ground.
+
+```{r}
+#| label: setup
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(caret)
+library(spdep)
+library(nngeo)
+options(scipen = 999)
+```
+
+```{r}
+#| label: helpers
+check_na <- function(formula, df) {
+  vars <- all.vars(formula)
+  bad <- vars[sapply(vars, function(v) any(is.na(df[[v]])))]
+  if (length(bad) > 0) {
+    stop("These variables have NAs: ", paste(bad, collapse = ", "),
+         ". Fill them or choose another variable (Rule 1).")
+  }
+}
+
+# 10-fold CV RMSE, same folds every time
+cv_rmse <- function(formula, data) {
+  df <- if (inherits(data, "sf")) st_drop_geometry(data) else data
+  check_na(formula, df)
+  set.seed(5080)
+  fit <- train(formula, data = df, method = "lm",
+               trControl = trainControl(method = "cv", number = 10))
+  fit$results$RMSE
+}
+
+# Each house's prediction from the fold where it was held out
+cv_pred <- function(formula, data) {
+  df <- if (inherits(data, "sf")) st_drop_geometry(data) else data
+  check_na(formula, df)
+  set.seed(5080)
+  fit <- train(formula, data = df, method = "lm",
+               trControl = trainControl(method = "cv", number = 10,
+                                        savePredictions = "final"))
+  fit$pred %>% arrange(rowIndex) %>% pull(pred)
+}
+
+# Chicago Data Portal (Socrata) -> sf. `where` is a SoQL filter.
+socrata_get <- function(dataset, where, select = NULL, limit = 200000) {
+  where <- str_squish(where)
+  q <- paste0("$where=", URLencode(where, reserved = TRUE), "&$limit=", limit)
+  if (!is.null(select)) q <- paste0(q, "&$select=", URLencode(str_squish(select), reserved = TRUE))
+  url <- paste0("https://data.cityofchicago.org/resource/", dataset, ".geojson?", q)
+  tmp <- tempfile(fileext = ".geojson")
+  resp <- tryCatch(download.file(url, tmp, quiet = TRUE), error = function(e) e)
+  if (inherits(resp, "error")) stop("Portal request failed. Open this URL in a browser to see why:\n", url)
+  st_read(tmp, quiet = TRUE)
+}
+```
+
+### Load both files together (provided)
+
+Build every feature on `all_sales`, so training and test houses get identical features. Split off `train` again whenever you add something.
+
+```{r}
+#| label: load
+all_sales <- bind_rows(
+  read_csv("data/chicago_train.csv", show_col_types = FALSE) %>% mutate(split = "train"),
+  read_csv("data/chicago_test.csv", show_col_types = FALSE) %>% mutate(split = "test")
+) %>%
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) %>%
+  st_transform(3435)            # Illinois East State Plane, feet
+
+all_sales %>% st_drop_geometry() %>% count(split)
+```
+
+Useful sources: the [Chicago Data Portal](https://data.cityofchicago.org) (find a dataset's ID under its API button), the Census via `tidycensus`, and Cook County's open data.
+
+## Part 1: Clean and Explore
+
+Decide which training sales are market sales. Record each rule, why, and how many it removed. Then explore: at least four plots, including a map of price.
+
+### Market Sale Cleaning
+
+We excluded 1,232 training records flagged as multi-sales (is_multisale = 1), because their recorded prices may represent multiple parcels rather than a single property. This reduced the training dataset from 23,200 to 21,968 sales (5.3% removed).
+
+We retained the remaining sales, including lower-priced transactions, because a low price alone does not establish that a transaction was non-market. No test records were removed.
+
+### Missing Value Treatment
+
+Missing predictor values were imputed using the median for numeric variables and the most frequent value for binary variables. Replacement values were calculated from the cleaned training data only. No additional training records were removed, and all training predictors now have complete values.
+
+```{r}
+#| label: part-1
+
+# Keep single-sale training records
+train_clean <- all_sales %>%
+  filter(split == "train", is_multisale == 0)
+
+# Calculate replacement values from training data only
+fireplace_fill <- median(train_clean$num_fireplaces, na.rm = TRUE)
+half_bath_fill <- median(train_clean$num_half_baths, na.rm = TRUE)
+garage_fill <- median(train_clean$garage_size, na.rm = TRUE)
+lot_fill <- median(train_clean$lotsize_acre, na.rm = TRUE)
+
+furnace_fill <- as.numeric(
+  names(which.max(table(train_clean$warmairfurnace)))
+)
+
+basement_fill <- as.numeric(
+  names(which.max(table(train_clean$full_basement)))
+)
+
+# Fill missing training values
+train_clean <- train_clean %>%
+  mutate(
+    num_fireplaces = if_else(
+      is.na(num_fireplaces), fireplace_fill, num_fireplaces
+    ),
+    num_half_baths = if_else(
+      is.na(num_half_baths), half_bath_fill, num_half_baths
+    ),
+    garage_size = if_else(
+      is.na(garage_size), garage_fill, garage_size
+    ),
+    lotsize_acre = if_else(
+      is.na(lotsize_acre), lot_fill, lotsize_acre
+    ),
+    warmairfurnace = if_else(
+      is.na(warmairfurnace), furnace_fill, warmairfurnace
+    ),
+    full_basement = if_else(
+      is.na(full_basement), basement_fill, full_basement
+    )
+  )
+
+# Check remaining missing values
+colSums(is.na(sf::st_drop_geometry(train_clean)))
+```
+
+```{r}
+#| label: prepare-test-data
+
+# Keep all test records
+test_clean <- all_sales %>%
+  filter(split == "test") %>%
+  mutate(
+    num_fireplaces = if_else(
+      is.na(num_fireplaces), fireplace_fill, num_fireplaces
+    ),
+    num_half_baths = if_else(
+      is.na(num_half_baths), half_bath_fill, num_half_baths
+    ),
+    garage_size = if_else(
+      is.na(garage_size), garage_fill, garage_size
+    ),
+    lotsize_acre = if_else(
+      is.na(lotsize_acre), lot_fill, lotsize_acre
+    ),
+    warmairfurnace = if_else(
+      is.na(warmairfurnace), furnace_fill, warmairfurnace
+    ),
+    full_basement = if_else(
+      is.na(full_basement), basement_fill, full_basement
+    )
+  )
+
+# Verify test rows and missing predictors
+nrow(test_clean)
+
+colSums(
+  is.na(
+    sf::st_drop_geometry(test_clean) %>%
+      select(-sale_price)
+  )
+)
+```
+
+```{r}
+
+#| label: fig-price-distribution
+
+# Spiderweb decoration (visual only)
+web_center <- c(1.98, 2550)
+web_angles <- seq(pi, 1.5 * pi, length.out = 11)
+web_radii <- seq(0.10, 0.52, length.out = 7)
+
+web_spokes <- data.frame(
+  x = rep(web_center[1], length(web_angles)),
+  y = rep(web_center[2], length(web_angles)),
+  xend = web_center[1] + 0.52 * cos(web_angles),
+  yend = web_center[2] + 2200 * sin(web_angles)
+)
+
+web_rings <- do.call(rbind, lapply(seq_along(web_radii), function(i) {
+  r <- web_radii[i]
+  data.frame(
+    x = web_center[1] + r * cos(web_angles),
+    y = web_center[2] + r * 4200 * sin(web_angles),
+    group = i
+  )
+}))
+
+ggplot(train_clean, aes(x = sale_price / 1000000)) +
+  geom_histogram(
+    binwidth = 0.05,
+    fill = "#C5A45A",
+    color = "#111714",
+    linewidth = 0.25
+  ) +
+  annotate(
+    "rect",
+    xmin = 1.35, xmax = 2.05,
+    ymin = 1500, ymax = 2700,
+    fill = "#541A20", alpha = 0.08
+  ) +
+  geom_segment(
+    data = web_spokes,
+    aes(x = x, y = y, xend = xend, yend = yend),
+    inherit.aes = FALSE,
+    color = "#BDA77C",
+    linewidth = 0.55,
+    alpha = 0.75
+  ) +
+  geom_path(
+    data = web_rings,
+    aes(x = x, y = y, group = group),
+    inherit.aes = FALSE,
+    color = "#BDA77C",
+    linewidth = 0.55,
+    alpha = 0.8
+  ) +
+  annotate(
+    "segment",
+    x = 1.79, xend = 1.79,
+    y = 2550, yend = 1940,
+    color = "#C5A45A",
+    linewidth = 0.6
+  ) +
+  annotate(
+    "point",
+    x = 1.79, y = 1900,
+    shape = 21, size = 7,
+    fill = "#080909", color = "#C5A45A"
+  ) +
+  annotate(
+    "point",
+    x = c(1.775, 1.805),
+    y = c(1910, 1910),
+    color = "#E34B42",
+    size = 1.6
+  ) +
+  scale_x_continuous(
+    breaks = seq(0, 2, 0.25),
+    labels = function(x) sprintf("$%.2fM", x),
+    expand = c(0, 0)
+  ) +
+  coord_cartesian(
+    xlim = c(0, 2),
+    ylim = c(0, 2700),
+    clip = "off"
+  ) +
+  labs(
+    title = "Chicago Housing Market | Sale Price Distribution",
+    subtitle = "Distribution of Chicago home sale prices | 2023–2025",
+    x = "Sale Price ($ Millions)",
+    y = "Number of Sales",
+    caption = "View limited to $2M. Higher-priced sales remain in the dataset."
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.background = element_rect(fill = "#101613", color = NA),
+    panel.background = element_rect(fill = "#101613", color = NA),
+    panel.grid.major = element_line(color = "#354039", linewidth = 0.3),
+    panel.grid.minor = element_blank(),
+    text = element_text(color = "#F4EBD8"),
+    axis.text = element_text(color = "#F4EBD8"),
+    axis.title = element_text(color = "#F4EBD8"),
+    plot.title = element_text(
+      color = "#C5A45A", face = "bold", size = 19
+    ),
+    plot.subtitle = element_text(color = "#D9D0BB", size = 10),
+    plot.caption = element_text(
+      color = "#D9D0BB", size = 9, hjust = 0
+    ),
+    plot.margin = margin(20, 30, 20, 20)
+  )
+
+```
+
+### Figure 1 — Sale Price Distribution
+
+The distribution of Chicago home sale prices is strongly right-skewed, with most transactions concentrated at relatively lower price levels and fewer sales at higher prices. This suggests that unusually expensive properties may influence model performance, making it important to evaluate prediction errors across different price ranges.
+
+The figure displays prices up to $2 million for readability; higher-priced transactions remain in the training dataset.
+
+```{r}
+
+#| label: fig-building-size-price
+#| fig-width: 11
+#| fig-height: 7
+
+# ---------------------------------------
+# Halloween Decorations: Moon and Bats
+# ---------------------------------------
+
+bat_shape <- data.frame(
+  x = c(
+    -1, -0.75, -0.55, -0.35, -0.15,
+    -0.08, 0, 0.08, 0.15, 0.35,
+    0.55, 0.75, 1, 0.65, 0.35,
+    0, -0.35, -0.65
+  ),
+  y = c(
+    0.1, 0.35, 0.05, 0.3, 0.05,
+    0.2, 0.08, 0.2, 0.05, 0.3,
+    0.05, 0.35, 0.1, -0.12, -0.03,
+    -0.15, -0.03, -0.12
+  )
+)
+
+bat_positions <- data.frame(
+  x = c(5.10, 5.60, 4.85),
+  y = c(1.75, 1.50, 1.40),
+  size = c(0.25, 0.18, 0.14)
+)
+
+bats <- do.call(
+  rbind,
+  lapply(seq_len(nrow(bat_positions)), function(i) {
+    data.frame(
+      x = bat_positions$x[i] +
+        bat_shape$x * bat_positions$size[i],
+      y = bat_positions$y[i] +
+        bat_shape$y * bat_positions$size[i],
+      bat = i
+    )
+  })
+)
+
+# Crescent Moon
+moon_angle <- seq(0, 2 * pi, length.out = 150)
+
+moon <- data.frame(
+  x = 5.85 + 0.25 * cos(moon_angle),
+  y = 1.82 + 0.14 * sin(moon_angle)
+)
+
+moon_cut <- data.frame(
+  x = 5.94 + 0.25 * cos(moon_angle),
+  y = 1.87 + 0.14 * sin(moon_angle)
+)
+
+# ---------------------------------------
+# Figure 2: Building Size vs. Sale Price
+# ---------------------------------------
+
+ggplot(
+  train_clean,
+  aes(
+    x = building_000sf,
+    y = sale_price / 1000000
+  )
+) +
+  geom_point(
+    color = "#D8B565",
+    alpha = 0.06,
+    size = 0.35
+  ) +
+  geom_polygon(
+    data = moon,
+    aes(x, y),
+    inherit.aes = FALSE,
+    fill = "#E8D6A6",
+    color = NA
+  ) +
+  geom_polygon(
+    data = moon_cut,
+    aes(x, y),
+    inherit.aes = FALSE,
+    fill = "#101613",
+    color = NA
+  ) +
+  geom_polygon(
+    data = bats,
+    aes(x, y, group = bat),
+    inherit.aes = FALSE,
+    fill = "#C5A45A",
+    color = "#E8D6A6",
+    linewidth = 0.2
+  ) +
+  scale_x_continuous(
+    breaks = seq(0, 6, 1)
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 2, 0.5),
+    labels = function(y) paste0("$", y, "M")
+  ) +
+  coord_cartesian(
+    xlim = c(0, 6),
+    ylim = c(0, 2)
+  ) +
+  labs(
+    title = "Building Size and Sale Price in Chicago",
+    subtitle = "Chicago housing transactions | 2023–2025",
+    x = "Building Area (Thousand Sq. Ft.)",
+    y = "Sale Price ($ Millions)",
+    caption = paste(
+      "View limited to 6,000 sq. ft. and $2M;",
+      "observations outside this view remain in the dataset."
+    )
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.background = element_rect(
+      fill = "#101613",
+      color = NA
+    ),
+    panel.background = element_rect(
+      fill = "#101613",
+      color = NA
+    ),
+    panel.grid.major = element_line(
+      color = "#354039",
+      linewidth = 0.3
+    ),
+    panel.grid.minor = element_blank(),
+    text = element_text(color = "#F4EBD8"),
+    axis.text = element_text(color = "#F4EBD8"),
+    axis.title = element_text(color = "#F4EBD8"),
+    plot.title = element_text(
+      color = "#C5A45A",
+      face = "bold",
+      size = 17
+    ),
+    plot.subtitle = element_text(
+      color = "#D9D0BB",
+      size = 10
+    ),
+    plot.caption = element_text(
+      color = "#D9D0BB",
+      size = 9,
+      hjust = 0
+    ),
+    plot.margin = margin(20, 25, 20, 20)
+  )
+
+```
+### Figure 2 — Building Size and Sale Price
+
+The scatter plot shows a positive relationship between building size and sale price, suggesting that larger homes generally sell for higher prices. However, the substantial variation in prices among similarly sized properties indicates that building area alone cannot fully explain housing values.
+
+This finding supports including building size as a predictor while also considering additional property characteristics and spatial factors. The displayed ranges are limited for readability, without removing observations from the underlying dataset.
+
+```{r}
+#| label: chicago-price-map
+#| fig-width: 9
+#| fig-height: 9
+#| out-width: "100%"
+#| fig-align: center
+#| fig-format: png
+#| dpi: 150
+
+# Extract projected coordinates for mapping
+map_data <- train_clean
+map_coords <- sf::st_coordinates(map_data)
+
+map_data <- sf::st_drop_geometry(map_data)
+map_data$x <- map_coords[, 1]
+map_data$y <- map_coords[, 2]
+
+# Chicago sale price map
+ggplot(map_data, aes(x = x, y = y)) +
+  geom_point(
+    aes(color = sale_price),
+    size = 0.55,
+    alpha = 0.8
+  ) +
+  scale_color_gradientn(
+    colors = c(
+      "#F6E6A8",
+      "#EBC66A",
+      "#D99A35",
+      "#B96A26",
+      "#873E20"
+    ),
+    trans = "log10",
+    breaks = c(
+      100000,
+      500000,
+      1000000,
+      5000000
+    ),
+    labels = scales::label_dollar(
+      scale = 1e-6,
+      suffix = "M"
+    ),
+    name = "Sale Price (USD)"
+  ) +
+  coord_fixed(
+    ratio = 1,
+    expand = TRUE
+  ) +
+  labs(
+    title = "Chicago Home Sale Price Map",
+    subtitle = "Residential sale prices across Chicago | 2023–2025",
+    caption = "Training sales only | Logarithmic color scale for visualization"
+  ) +
+  guides(
+    color = guide_colorbar(
+      direction = "horizontal",
+      title.position = "top",
+      title.hjust = 0.5,
+      barwidth = grid::unit(8, "cm"),
+      barheight = grid::unit(0.4, "cm")
+    )
+  ) +
+  theme_void(base_size = 12) +
+  theme(
+    plot.background = element_rect(
+      fill = "white",
+      color = NA
+    ),
+    panel.background = element_rect(
+      fill = "white",
+      color = NA
+    ),
+    plot.title = element_text(
+      color = "#174D38",
+      face = "bold",
+      size = 17,
+      margin = margin(b = 10)
+    ),
+    plot.subtitle = element_text(
+      color = "#555555",
+      size = 10,
+      margin = margin(b = 15)
+    ),
+    plot.caption = element_text(
+      color = "#666666",
+      size = 9,
+      hjust = 0,
+      margin = margin(t = 15)
+    ),
+    legend.position = "bottom",
+    legend.background = element_rect(
+      fill = "white",
+      color = NA
+    ),
+    legend.key = element_rect(
+      fill = "white",
+      color = NA
+    ),
+    legend.title = element_text(
+      color = "#174D38",
+      face = "bold",
+      size = 11
+    ),
+    legend.text = element_text(
+      color = "#444444",
+      size = 9
+    ),
+    plot.margin = margin(20, 20, 20, 20)
+  )
+```
+### Figure 3 — Spatial Distribution of Sale Prices
+
+The map reveals geographic variation in Chicago home sale prices, with higher-priced transactions appearing more frequently in some northern and central areas, while lower-priced sales are more common in parts of the south and west.
+
+These spatial differences suggest that location may be an important predictor of housing prices. This motivates exploring geographic features and spatial effects in the modeling process.
+
+```{r}
+
+#| label: fig-price-by-year
+#| fig-width: 11
+#| fig-height: 7
+
+ggplot(
+  train_clean,
+  aes(
+    x = factor(year),
+    y = sale_price / 1000000,
+    fill = factor(year)
+  )
+) +
+  geom_boxplot(
+    width = 0.52,
+    alpha = 0.9,
+    color = "#F4EBD8",
+    linewidth = 0.55,
+    outlier.alpha = 0.10,
+    outlier.size = 0.5
+  ) +
+  scale_fill_manual(
+    values = c(
+      "2023" = "#C5A45A",
+      "2024" = "#E28B32",
+      "2025" = "#A64A35"
+    )
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 2, 0.25),
+    labels = function(y) paste0("$", y, "M")
+  ) +
+  coord_cartesian(
+    ylim = c(0, 2)
+  ) +
+  labs(
+    title = "Chicago Home Sale Prices by Year",
+    subtitle = "Comparison of transaction price distributions | 2023–2025",
+    x = "Sale Year",
+    y = "Sale Price ($ Millions)",
+    caption = "Training sales only | View limited to $2M; higher-priced transactions remain in the dataset."
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.background = element_rect(
+      fill = "#101613",
+      color = NA
+    ),
+    panel.background = element_rect(
+      fill = "#101613",
+      color = NA
+    ),
+    panel.grid.major = element_line(
+      color = "#354039",
+      linewidth = 0.3
+    ),
+    panel.grid.minor = element_blank(),
+    legend.position = "none",
+    text = element_text(color = "#F4EBD8"),
+    axis.text = element_text(color = "#F4EBD8"),
+    axis.title = element_text(color = "#F4EBD8"),
+    plot.title = element_text(
+      color = "#C5A45A",
+      face = "bold",
+      size = 18
+    ),
+    plot.subtitle = element_text(
+      color = "#D9D0BB",
+      size = 10
+    ),
+    plot.caption = element_text(
+      color = "#D9D0BB",
+      size = 9,
+      hjust = 0
+    ),
+    plot.margin = margin(20, 25, 20, 20)
+  )
+
+```
+
+### Figure 4 — Home Sale Prices by Year
+
+The boxplots show a gradual increase in median sale prices from 2023 to 2025, alongside substantial variation within each year. The presence of numerous high-priced transactions also highlights the right-skewed nature of the housing market.
+
+These patterns suggest that sale year may be useful as a predictor, although differences in the types and locations of properties sold each year could also contribute to the observed changes.
+
+
+**Answer:** What in your exploration shaped your modeling choices?
+
+Our exploratory analysis highlighted four important patterns that informed our modeling approach. First, sale prices were strongly right-skewed, suggesting the need to evaluate prediction errors carefully, particularly for expensive properties. Second, building size showed a positive relationship with sale price, supporting its use as a predictor.
+
+Third, the price map revealed geographic differences, suggesting that spatial features may help explain variation in housing values. Finally, median sale prices differed across 2023–2025, indicating that sale year may also be relevant. Together, these findings motivate a model that considers property characteristics, location, and time rather than relying on a single predictor.
+
+## Part 2 — Modeling & Feature Engineering
+Start with a structure-only baseline. Then add features in steps you can learn from, logging each one. Keep the log in a tibble with columns `model`, `added`, `cv_rmse`, `moran_i`, `notes`.
+
+### Model 1 — Structural Baseline
+
+```{r}
+#| label: part-2
+# Model 1: Structural Baseline
+baseline_formula <- sale_price ~
+  building_000sf +
+  building_age +
+  lotsize_acre +
+  num_bedrooms +
+  num_full_baths +
+  garage_size +
+  central_air +
+  finished_basement
+
+# Fit baseline regression
+baseline_model <- lm(
+  formula = baseline_formula,
+  data = sf::st_drop_geometry(train_clean)
+)
+
+# Inspect model results
+summary(baseline_model)
+```
+
+```{r}
+#| label: cv-folds
+
+# Prepare the same training observations for every model
+model_data <- sf::st_drop_geometry(train_clean)
+
+# Create reproducible 10-fold cross-validation splits
+set.seed(5080)
+
+cv_folds <- caret::createFolds(
+  model_data$sale_price,
+  k = 10,
+  list = TRUE,
+  returnTrain = FALSE
+)
+
+# Check the number of folds and their sizes
+length(cv_folds)
+sapply(cv_folds, length)
+```
+
+```{r}
+#| label: baseline-cv-rmse
+
+# Store predictions from all 10 validation folds
+cv_predictions <- rep(NA_real_, nrow(model_data))
+
+# Train and evaluate the baseline model on each fold
+for (i in seq_along(cv_folds)) {
+
+  validation_rows <- cv_folds[[i]]
+
+  fold_model <- lm(
+    formula = baseline_formula,
+    data = model_data[-validation_rows, ]
+  )
+
+  cv_predictions[validation_rows] <- predict(
+    fold_model,
+    newdata = model_data[validation_rows, ]
+  )
+}
+
+# Calculate overall out-of-fold RMSE in dollars
+baseline_cv_rmse <- sqrt(
+  mean((model_data$sale_price - cv_predictions)^2)
+)
+
+# Display the result
+baseline_cv_rmse
+```
+```{r}
+#| label: baseline-morans-i
+
+# Calculate out-of-fold prediction residuals
+baseline_cv_residuals <- model_data$sale_price - cv_predictions
+
+# Extract projected coordinates (EPSG:3435)
+train_coords <- sf::st_coordinates(train_clean)
+
+# Define 8 nearest neighbors, allowing identical coordinates
+baseline_knn <- spdep::knearneigh(
+  train_coords,
+  k = 8,
+  use_kd_tree = FALSE
+)
+
+baseline_neighbors <- spdep::knn2nb(baseline_knn)
+
+# Create row-standardized spatial weights
+baseline_weights <- spdep::nb2listw(
+  baseline_neighbors,
+  style = "W",
+  zero.policy = TRUE
+)
+
+# Calculate Moran's I
+baseline_moran <- spdep::moran.test(
+  baseline_cv_residuals,
+  baseline_weights,
+  zero.policy = TRUE
+)
+
+# Display results
+baseline_moran
+```
+### Model 2 — Expanded Structural
+```{r}
+#| label: model-2-expanded-structural
+
+# Model 2: Add four structural predictors
+model2_formula <- update(
+  baseline_formula,
+  . ~ . +
+    num_half_baths +
+    num_fireplaces +
+    full_basement +
+    brick_stone_ext
+)
+
+# Fit Model 2 on the cleaned training data
+model2 <- lm(
+  formula = model2_formula,
+  data = model_data
+)
+
+# Generate out-of-fold predictions using the same 10 folds
+model2_cv_predictions <- rep(NA_real_, nrow(model_data))
+
+for (i in seq_along(cv_folds)) {
+
+  validation_rows <- cv_folds[[i]]
+
+  fold_model2 <- lm(
+    formula = model2_formula,
+    data = model_data[-validation_rows, ]
+  )
+
+  model2_cv_predictions[validation_rows] <- predict(
+    fold_model2,
+    newdata = model_data[validation_rows, ]
+  )
+}
+
+# Calculate 10-fold CV RMSE in dollars
+model2_cv_rmse <- sqrt(
+  mean(
+    (model_data$sale_price - model2_cv_predictions)^2
+  )
+)
+
+# Calculate out-of-fold residuals
+model2_cv_residuals <- (
+  model_data$sale_price - model2_cv_predictions
+)
+
+# Calculate Moran's I using the same spatial weights
+model2_moran <- spdep::moran.test(
+  model2_cv_residuals,
+  baseline_weights,
+  zero.policy = TRUE
+)
+
+# Display Model 2 evaluation results
+data.frame(
+  model = "Model 2 - Expanded Structural",
+  cv_rmse = round(model2_cv_rmse, 2),
+  moran_i = round(
+    unname(model2_moran$estimate["Moran I statistic"]),
+    4
+  )
+)
+```
+
+### Nonlinear Building Age
+
+We explore a squared building-age term to allow the relationship between property age and sale price to be nonlinear. This feature is derived entirely from an existing structural characteristic and does not use sale prices.
+```{r}
+#| label: model-3-nonlinear
+
+# Create a nonlinear building-age feature
+model3_data <- model_data %>%
+  mutate(
+    building_age_sq = building_age^2
+  )
+
+# Add the nonlinear feature to Model 2
+model3_formula <- update(
+  model2_formula,
+  . ~ . + building_age_sq
+)
+
+# Fit Model 3
+model3 <- lm(
+  formula = model3_formula,
+  data = model3_data
+)
+
+# Generate out-of-fold predictions using the same 10 folds
+model3_cv_predictions <- rep(NA_real_, nrow(model3_data))
+
+for (i in seq_along(cv_folds)) {
+
+  validation_rows <- cv_folds[[i]]
+
+  fold_model3 <- lm(
+    formula = model3_formula,
+    data = model3_data[-validation_rows, ]
+  )
+
+  model3_cv_predictions[validation_rows] <- predict(
+    fold_model3,
+    newdata = model3_data[validation_rows, ]
+  )
+}
+
+# Calculate 10-fold CV RMSE
+model3_cv_rmse <- sqrt(
+  mean(
+    (model3_data$sale_price - model3_cv_predictions)^2
+  )
+)
+
+# Calculate out-of-fold residuals
+model3_cv_residuals <- (
+  model3_data$sale_price - model3_cv_predictions
+)
+
+# Calculate Moran's I using the same spatial weights
+model3_moran <- spdep::moran.test(
+  model3_cv_residuals,
+  baseline_weights,
+  zero.policy = TRUE
+)
+
+# Display Model 3 evaluation results
+data.frame(
+  model = "Model 3 - Nonlinear Structural",
+  cv_rmse = round(model3_cv_rmse, 2),
+  moran_i = round(
+    unname(model3_moran$estimate["Moran I statistic"]),
+    4
+  )
+)
+```
+### Model 4 — Temporal Features
+
+```{r}
+#| label: model-4-temporal
+
+# Add temporal predictors to Model 3
+model4_formula <- update(
+  model3_formula,
+  . ~ . + factor(year) + factor(sale_qrt)
+)
+
+# Fit Model 4 using the same training observations
+model4 <- lm(
+  formula = model4_formula,
+  data = model3_data
+)
+
+# Generate out-of-fold predictions using the same 10 folds
+model4_cv_predictions <- rep(NA_real_, nrow(model3_data))
+
+for (i in seq_along(cv_folds)) {
+
+  validation_rows <- cv_folds[[i]]
+
+  fold_model4 <- lm(
+    formula = model4_formula,
+    data = model3_data[-validation_rows, ]
+  )
+
+  model4_cv_predictions[validation_rows] <- predict(
+    fold_model4,
+    newdata = model3_data[validation_rows, ]
+  )
+}
+
+# Calculate 10-fold CV RMSE
+model4_cv_rmse <- sqrt(
+  mean(
+    (model3_data$sale_price - model4_cv_predictions)^2
+  )
+)
+
+# Calculate out-of-fold residuals
+model4_cv_residuals <- (
+  model3_data$sale_price - model4_cv_predictions
+)
+
+# Calculate Moran's I using the same spatial weights
+model4_moran <- spdep::moran.test(
+  model4_cv_residuals,
+  baseline_weights,
+  zero.policy = TRUE
+)
+
+# Display Model 4 evaluation results
+data.frame(
+  model = "Model 4 - Temporal Features",
+  cv_rmse = round(model4_cv_rmse, 2),
+  moran_i = round(
+    unname(model4_moran$estimate["Moran I statistic"]),
+    4
+  )
+)
+```
+### Distance to Downtown Chicago
+
+We introduce distance to Chicago City Hall as a spatial predictor. Straight-line distance is calculated in miles using projected property coordinates. This feature does not rely on sale prices and can be calculated consistently for training and test properties.
+```{r}
+#| label: model-5-spatial
+
+# Chicago City Hall reference point (approximate coordinates)
+city_hall <- sf::st_sfc(
+  sf::st_point(c(-87.6324, 41.8839)),
+  crs = 4326
+) %>%
+  sf::st_transform(3435)
+
+# Calculate straight-line distance to City Hall in miles
+downtown_distance <- as.numeric(
+  sf::st_distance(train_clean, city_hall)
+) / 5280
+
+# Add spatial feature to Model 4 data
+model5_data <- model3_data %>%
+  mutate(
+    distance_to_downtown = downtown_distance
+  )
+
+# Add distance to Model 4 formula
+model5_formula <- update(
+  model4_formula,
+  . ~ . + distance_to_downtown
+)
+
+# Fit Model 5
+model5 <- lm(
+  formula = model5_formula,
+  data = model5_data
+)
+
+# Generate out-of-fold predictions using the same 10 folds
+model5_cv_predictions <- rep(NA_real_, nrow(model5_data))
+
+for (i in seq_along(cv_folds)) {
+
+  validation_rows <- cv_folds[[i]]
+
+  fold_model5 <- lm(
+    formula = model5_formula,
+    data = model5_data[-validation_rows, ]
+  )
+
+  model5_cv_predictions[validation_rows] <- predict(
+    fold_model5,
+    newdata = model5_data[validation_rows, ]
+  )
+}
+
+# Calculate 10-fold CV RMSE
+model5_cv_rmse <- sqrt(
+  mean(
+    (model5_data$sale_price - model5_cv_predictions)^2
+  )
+)
+
+# Calculate out-of-fold residuals
+model5_cv_residuals <- (
+  model5_data$sale_price - model5_cv_predictions
+)
+
+# Calculate Moran's I using the same spatial weights
+model5_moran <- spdep::moran.test(
+  model5_cv_residuals,
+  baseline_weights,
+  zero.policy = TRUE
+)
+
+# Display Model 5 evaluation results
+data.frame(
+  model = "Model 5 - Spatial Features",
+  cv_rmse = round(model5_cv_rmse, 2),
+  moran_i = round(
+    unname(model5_moran$estimate["Moran I statistic"]),
+    4
+  )
+)
+```
+### 🦂 The Final Reckoning — Model Performance Log
+
+*Five models entered the nightmare. Only the strongest predictions survive.*
+```{r}
+#| label: model-log
+#| echo: false
+
+# Combine results from all five models
+model_log <- tibble::tibble(
+  model = c(
+    "M1 - Structural Baseline",
+    "M2 - Expanded Structural",
+    "M3 - Nonlinear Structural",
+    "M4 - Temporal Features",
+    "M5 - Spatial Features"
+  ),
+  added = c(
+    "8 structural predictors",
+    "4 additional structural predictors",
+    "Squared building age",
+    "Sale year and quarter",
+    "Distance to Chicago City Hall"
+  ),
+  cv_rmse = round(c(
+    baseline_cv_rmse,
+    model2_cv_rmse,
+    model3_cv_rmse,
+    model4_cv_rmse,
+    model5_cv_rmse
+  ), 2),
+  moran_i = round(c(
+    unname(baseline_moran$estimate["Moran I statistic"]),
+    unname(model2_moran$estimate["Moran I statistic"]),
+    unname(model3_moran$estimate["Moran I statistic"]),
+    unname(model4_moran$estimate["Moran I statistic"]),
+    unname(model5_moran$estimate["Moran I statistic"])
+  ), 4),
+  notes = c(
+    "Initial structural benchmark",
+    "Improved RMSE and spatial autocorrelation",
+    "Lower RMSE, higher Moran's I",
+    "Small additional RMSE improvement",
+    "Lowest RMSE, spatial clustering remains"
+  )
+)
+
+# Display the model performance log
+knitr::kable(
+  model_log,
+  format = "html",
+  col.names = c(
+    "MODEL",
+    "FEATURES ADDED",
+    "CV RMSE ($)",
+    "MORAN'S I",
+    "MODEL NOTES"
+  ),
+  caption = "The Final Reckoning | Five-Model Performance Comparison",
+  table.attr = 'class="nightmare-model-log"'
+)
+```
+### 🕷️ What the Numbers Reveal
+
+Across the five models, predictive performance improved as additional structural, nonlinear, temporal, and spatial features were introduced. The cross-validation RMSE decreased from **$292,323.60** in Model 1 to **$275,385.60** in Model 5, representing an improvement of approximately **5.8%**.
+
+Model 5 achieved the lowest prediction error, suggesting that distance to Chicago City Hall provides useful information beyond the other predictors. However, its Moran's I increased to **0.3922**, indicating that spatial clustering remains in the prediction errors. Therefore, although Model 5 performs best in terms of predictive accuracy, it does not fully capture the spatial patterns in housing prices.
+
+
+## Model Evaluation
+
+*Coming soon.*
+
+## Spatial Error & Equity Analysis
+
+*Coming soon.*
+
+## Final Predictions
+
+*Coming soon.*
+
+## Team Reflection
+
+*Coming soon.*
+
+
+---
+
