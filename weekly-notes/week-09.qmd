@@ -1,0 +1,21 @@
+---
+title: "Week 9: Predictive Policing"
+description: "Counts, Fishnets, and Dirty Data (not dirty dancing)"
+date: 2026-10-30
+---
+
+## What We Did
+
+## Key Concepts
+
+## Reflection
+
+## Questions I Still Have
+
+## Week 8 Notes
+
+One property to check: mean = variance
+A Poisson model assumes the variance equals the mean
+
+If the variance is much bigger, that's overdispersion
+The fix is negative binomial regression (MASS:glm.nb): same idea, plus one extra parameter for the spread
