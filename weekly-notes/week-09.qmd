@@ -12,7 +12,7 @@ date: 2026-10-30
 
 ## Questions I Still Have
 
-## Week 8 Notes
+## Week 9 Notes
 
 One property to check: mean = variance
 A Poisson model assumes the variance equals the mean

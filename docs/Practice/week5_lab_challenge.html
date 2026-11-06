@@ -289,6 +289,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   |                                                                            
   |=====                                                                 |   7%
   |                                                                            
+  |=====                                                                 |   8%
+  |                                                                            
   |======                                                                |   8%
   |                                                                            
   |======                                                                |   9%
@@ -309,19 +311,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   |                                                                            
   |============                                                          |  17%
   |                                                                            
-  |============                                                          |  18%
+  |=============                                                         |  18%
   |                                                                            
   |=============                                                         |  19%
   |                                                                            
   |==============                                                        |  20%
   |                                                                            
-  |===============                                                       |  21%
+  |==============                                                        |  21%
   |                                                                            
   |===============                                                       |  22%
   |                                                                            
   |================                                                      |  23%
   |                                                                            
-  |=================                                                     |  24%
+  |================                                                      |  24%
   |                                                                            
   |=================                                                     |  25%
   |                                                                            
@@ -391,7 +393,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   |                                                                            
   |========================================                              |  57%
   |                                                                            
-  |========================================                              |  58%
+  |=========================================                             |  58%
   |                                                                            
   |=========================================                             |  59%
   |                                                                            
@@ -474,6 +476,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   |====================================================================  |  97%
   |                                                                            
   |===================================================================== |  98%
+  |                                                                            
+  |===================================================================== |  99%
   |                                                                            
   |======================================================================| 100%</code></pre>
 </div>
@@ -596,21 +600,21 @@ lm(formula = med_rentE ~ med_incE + pct_renter + pct_ba + n_stations,
 
 Residuals:
     Min      1Q  Median      3Q     Max 
--917.07 -151.80  -11.27  131.11 1376.34 
+-917.98 -151.79  -11.36  131.33 1376.09 
 
 Coefficients:
               Estimate Std. Error t value Pr(&gt;|t|)    
-(Intercept)  8.912e+02  6.250e+01  14.260  &lt; 2e-16 ***
-med_incE     3.742e-03  7.985e-04   4.686 3.92e-06 ***
-pct_renter  -6.352e-01  9.258e-01  -0.686 0.493084    
-pct_ba       5.956e+00  1.108e+00   5.374 1.36e-07 ***
-n_stations   5.424e+00  1.582e+00   3.428 0.000675 ***
+(Intercept)  8.904e+02  6.250e+01  14.248  &lt; 2e-16 ***
+med_incE     3.749e-03  7.986e-04   4.695 3.75e-06 ***
+pct_renter  -6.275e-01  9.262e-01  -0.677 0.498554    
+pct_ba       5.957e+00  1.110e+00   5.368 1.40e-07 ***
+n_stations   5.390e+00  1.587e+00   3.397 0.000754 ***
 ---
 Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
-Residual standard error: 256.6 on 372 degrees of freedom
-Multiple R-squared:  0.574, Adjusted R-squared:  0.5694 
-F-statistic: 125.3 on 4 and 372 DF,  p-value: &lt; 2.2e-16</code></pre>
+Residual standard error: 256.7 on 372 degrees of freedom
+Multiple R-squared:  0.5737,    Adjusted R-squared:  0.5691 
+F-statistic: 125.2 on 4 and 372 DF,  p-value: &lt; 2.2e-16</code></pre>
 </div>
 </div>
 <p>Look at the <code>n_stations</code> coefficient. Answer both questions in one or two sentences each:</p>
@@ -641,7 +645,7 @@ F-statistic: 125.3 on 4 and 372 DF,  p-value: &lt; 2.2e-16</code></pre>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(m2)<span class="sc">$</span>r.squared</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>[1] 0.5739606</code></pre>
+<pre><code>[1] 0.5737235</code></pre>
 </div>
 </div>
 <p>Hold on to these numbers. Part 6 asks whether they mean what they seem to.</p>
@@ -709,7 +713,7 @@ F-statistic: 125.3 on 4 and 372 DF,  p-value: &lt; 2.2e-16</code></pre>
 <span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="at">train =</span> rmse_train, <span class="at">test =</span> rmse_test)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>   train     test 
-252.9016 265.9391 </code></pre>
+252.9715 266.0207 </code></pre>
 </div>
 </div>
 <p><strong>Stop and look:</strong> Which RMSE is larger? Why would you expect that? In words: “The model’s typical miss on tracts it hasn’t seen is about $266 per month.”</p>
@@ -738,8 +742,8 @@ F-statistic: 125.3 on 4 and 372 DF,  p-value: &lt; 2.2e-16</code></pre>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>cv_m2<span class="sc">$</span>results</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>  intercept     RMSE Rsquared      MAE   RMSESD RsquaredSD    MAESD
-1      TRUE 253.1965 0.592134 189.5966 60.62536 0.09514692 34.84051</code></pre>
+<pre><code>  intercept     RMSE  Rsquared      MAE  RMSESD RsquaredSD    MAESD
+1      TRUE 253.2913 0.5918619 189.6548 60.5781 0.09493493 34.74683</code></pre>
 </div>
 </div>
 <p>Setting the same seed before each <code>train()</code> gives both models the same folds, so the comparison is fair.</p>
@@ -761,7 +765,7 @@ F-statistic: 125.3 on 4 and 372 DF,  p-value: &lt; 2.2e-16</code></pre>
 <tr class="even">
 <td>m2</td>
 <td>0.574</td>
-<td>$253.2</td>
+<td>$253.3</td>
 </tr>
 </tbody>
 </table>
@@ -792,7 +796,7 @@ F-statistic: 125.3 on 4 and 372 DF,  p-value: &lt; 2.2e-16</code></pre>
     studentized Breusch-Pagan test
 
 data:  m2
-BP = 13.662, df = 4, p-value = 0.008456</code></pre>
+BP = 13.668, df = 4, p-value = 0.008434</code></pre>
 </div>
 </div>
 <p><strong>Stop and look:</strong> Random cloud, funnel, or curve? If it’s a funnel, the predictions aren’t biased, but one RMSE hides the fact that the model misses by much more in some tracts. Which tracts?</p>
@@ -974,13 +978,13 @@ BP = 13.662, df = 4, p-value = 0.008456</code></pre>
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">Base (m2)</td>
-<td style="text-align: right;">253.2</td>
+<td style="text-align: right;">253.3</td>
 <td style="text-align: right;">0.592</td>
-<td style="text-align: right;">189.6</td>
+<td style="text-align: right;">189.7</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">Base + home value</td>
-<td style="text-align: right;">248.4</td>
+<td style="text-align: right;">248.5</td>
 <td style="text-align: right;">0.603</td>
 <td style="text-align: right;">186.0</td>
 </tr>
@@ -1016,33 +1020,33 @@ lm(formula = final_formula, data = tracts_ch)
 
 Residuals:
     Min      1Q  Median      3Q     Max 
--892.88 -132.47   -7.64  127.35 1196.43 
+-892.97 -132.15   -7.62  127.38 1196.48 
 
 Coefficients:
                         Estimate Std. Error t value Pr(&gt;|t|)    
-(Intercept)            -9224.390   2025.034  -4.555 7.18e-06 ***
-log(med_incE)            226.709     61.782   3.670 0.000280 ***
-pct_renter                -1.869      1.245  -1.501 0.134336    
-pct_ba                     9.600      1.318   7.284 2.06e-12 ***
-n_stations                 2.913      3.437   0.848 0.397174    
-log(med_value)          -116.860     41.558  -2.812 0.005193 ** 
-value_missing            160.215     77.600   2.065 0.039674 *  
-med_rooms                 14.049     28.759   0.489 0.625482    
-yr_built                   4.622      1.005   4.599 5.89e-06 ***
-pct_vacant                 4.759      2.483   1.917 0.056019 .  
-pct_poverty                1.405      1.624   0.865 0.387732    
-pct_transit               -2.197      1.430  -1.536 0.125312    
-pct_single                 5.041      1.362   3.701 0.000248 ***
-pct_bigbldg                5.690      1.144   4.975 1.01e-06 ***
-med_age                   -5.634      2.017  -2.793 0.005509 ** 
-log1p(dist_ch_mi)        -62.233     91.526  -0.680 0.496975    
-log1p(dist_station_mi)    50.181     44.055   1.139 0.255437    
+(Intercept)            -9227.502   2026.244  -4.554 7.21e-06 ***
+log(med_incE)            226.778     61.804   3.669 0.000280 ***
+pct_renter                -1.873      1.245  -1.505 0.133212    
+pct_ba                     9.599      1.317   7.287 2.02e-12 ***
+n_stations                 2.814      3.444   0.817 0.414370    
+log(med_value)          -116.729     41.539  -2.810 0.005224 ** 
+value_missing            160.217     77.624   2.064 0.039732 *  
+med_rooms                 14.063     28.749   0.489 0.625024    
+yr_built                   4.625      1.005   4.601 5.82e-06 ***
+pct_vacant                 4.760      2.483   1.917 0.055994 .  
+pct_poverty                1.403      1.624   0.864 0.388227    
+pct_transit               -2.206      1.429  -1.544 0.123544    
+pct_single                 5.035      1.363   3.695 0.000254 ***
+pct_bigbldg                5.692      1.144   4.974 1.02e-06 ***
+med_age                   -5.639      2.018  -2.795 0.005471 ** 
+log1p(dist_ch_mi)        -64.457     91.046  -0.708 0.479431    
+log1p(dist_station_mi)    50.694     43.673   1.161 0.246501    
 ---
 Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
-Residual standard error: 225.4 on 360 degrees of freedom
-Multiple R-squared:  0.6818,    Adjusted R-squared:  0.6677 
-F-statistic: 48.21 on 16 and 360 DF,  p-value: &lt; 2.2e-16</code></pre>
+Residual standard error: 225.5 on 360 degrees of freedom
+Multiple R-squared:  0.6818,    Adjusted R-squared:  0.6676 
+F-statistic:  48.2 on 16 and 360 DF,  p-value: &lt; 2.2e-16</code></pre>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb42"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>tracts_ch <span class="ot">&lt;-</span> tracts_ch <span class="sc">%&gt;%</span></span>
 <span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">fitted_final =</span> <span class="fu">fitted</span>(m_final),</span>
@@ -1122,8 +1126,8 @@ F-statistic: 48.21 on 16 and 360 DF,  p-value: &lt; 2.2e-16</code></pre>
 <td style="text-align: left;">42101036902</td>
 <td style="text-align: left;">Census Tract 369.02; Philadelphia County; Pennsylvania</td>
 <td style="text-align: right;">2979</td>
-<td style="text-align: right;">2308</td>
-<td style="text-align: right;">671</td>
+<td style="text-align: right;">2307</td>
+<td style="text-align: right;">672</td>
 <td style="text-align: right;">330</td>
 <td style="text-align: right;">6.7</td>
 <td style="text-align: left;">High (CV &lt; 12%)</td>
@@ -1186,7 +1190,7 @@ F-statistic: 48.21 on 16 and 360 DF,  p-value: &lt; 2.2e-16</code></pre>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb44"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="at">sd_m2 =</span> <span class="fu">sd</span>(tracts_ch<span class="sc">$</span>resid_m2), <span class="at">sd_final =</span> <span class="fu">sd</span>(tracts_ch<span class="sc">$</span>resid_final))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>   sd_m2 sd_final 
-255.2473 220.5859 </code></pre>
+255.3183 220.6024 </code></pre>
 </div>
 </div>
 </section>
@@ -1195,7 +1199,7 @@ F-statistic: 48.21 on 16 and 360 DF,  p-value: &lt; 2.2e-16</code></pre>
 <h3 class="anchored" data-anchor-id="our-answers">Our answers</h3>
 <ol type="1">
 <li><p><strong>CV RMSE.</strong> Our best model (B: A + neighborhood &amp; location) has a 10-fold CV RMSE of about $229. On tracts it hasn’t seen, its typical miss is about $229 per month, down from $253 for the Part 6 model m2.</p></li>
-<li><p><strong>One feature we added: median home value (<code>B25077</code>).</strong> Income describes who lives in a tract <em>now</em>, but home values capture what the location and housing stock are worth: amenities, housing quality, and gentrification pressure that current residents’ incomes may not show yet. It is not leakage: it comes from owners, not rents, and the agency would have it for any tract. Adding only home value (plus a missing flag) to m2 moves CV RMSE from $253 to $248.</p></li>
+<li><p><strong>One feature we added: median home value (<code>B25077</code>).</strong> Income describes who lives in a tract <em>now</em>, but home values capture what the location and housing stock are worth: amenities, housing quality, and gentrification pressure that current residents’ incomes may not show yet. It is not leakage: it comes from owners, not rents, and the agency would have it for any tract. Adding only home value (plus a missing flag) to m2 moves CV RMSE from $253 to $249.</p></li>
 <li><p><strong>One coefficient, read twice: <code>pct_ba</code>.</strong> In the final model, <code>pct_ba</code> has a coefficient of 9.6, so a tract with 10 more percentage points of adults holding a BA or higher has a predicted rent about $96 different.</p>
 <ul>
 <li><em>β̂ reading:</em> Holding the other variables fixed, more educated tracts are <em>associated</em> with that difference in rent. This does not mean degrees raise rents; education stands in for neighborhood demand and amenities we don’t measure.</li>

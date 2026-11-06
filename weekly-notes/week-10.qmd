@@ -1,0 +1,51 @@
+---
+title: "Week 10: "
+description: ""
+date: 2026-11-06
+---
+
+## What We Did
+
+## Key Concepts
+
+## Reflection
+
+## Questions I Still Have
+
+## Week 10 Notes
+
+The GLM Solution: Link Function
+
+Link(g): Map Outcome -> Predictors
+         w/out breaking the boundary rules
+Inverse Link(g^-1): Map Predictors -> Outcome
+                    Turn a mathematical score into real-world predictions
+
+deadly disease = genetics + exposuretage
+
+Model       Random component(y).    Bounded expected values.     Link function.           Inverse Link
+Logistic.   Binomial(1/0).          Probability pE(0,1)          Logit Link: ln(p/(1-p)). g^-1   
+                                                                                          Sigmoid Function
+Poisson     Poisson                 E(0,infinite)                Log Link: log(u)         (e^n)/(1+e^n)
+                                                                                          e^n
+                                                                                          
+Probability(p)
+Odds: p/(1-p) ->  Log Odds/Logit Link   ln(p/(1-p) -> B0 + B1x1
+p = e^z/(1+e^z) = 1/(1+e^-z)
+z = B0 + B1x1  (B is beta)
+
+If z > 0, p > 50% risk
+   z < 0, p < 50% risk
+   z = 0, p = 50% risk
+   
+Odds = p/(1-p)
+How many more times likely is it to happen than it doesn't
+p = 0.455  ->  0.835. For every 100 people not rearrested, 84 are rearrested
+
+Prob.    Odds p/(1-p).   Log-Odds.     Log-Odds=log(odds)  ln(odds)
+0.01.    0.01            -4.6
+0.10.    0.11.           -2.2
+0.50.    1               0
+0.80.    4.              1.4
+0.90.    9               2.2
+0.99.    99              4.6
